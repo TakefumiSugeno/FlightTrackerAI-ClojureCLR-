@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FlightTrackerAI.Web\FlightTrackerAI.Web.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Clojure" Version="1.12.2" />
+    <Content Include="**/*.clj" Exclude="bin/**;obj/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

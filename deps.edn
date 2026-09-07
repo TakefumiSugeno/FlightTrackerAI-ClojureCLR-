@@ -1,0 +1,7 @@
+{:paths ["src/FlightTrackerAI.Core"
+         "src/FlightTrackerAI.Infrastructure"
+         "src/FlightTrackerAI.Web"
+         "test/FlightTrackerAI.Core.Tests"
+         "test/FlightTrackerAI.Infrastructure.Tests"
+         "test/FlightTrackerAI.Web.Tests"]
+ :deps {}}

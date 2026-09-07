@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FlightTrackerAI.Core\FlightTrackerAI.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Clojure" Version="1.12.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
+    <Content Include="**/*.clj" Exclude="bin/**;obj/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
+

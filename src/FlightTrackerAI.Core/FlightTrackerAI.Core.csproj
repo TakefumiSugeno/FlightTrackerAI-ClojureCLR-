@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Clojure" Version="1.12.2" />
+    <Content Include="**/*.clj" Exclude="bin/**;obj/**" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="clojure.data.json" Version="2.5.1" />
+  </ItemGroup>
+</Project>
+

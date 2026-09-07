@@ -1,0 +1,48 @@
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# SQLite & Data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Logs & temp
+*.log
+doc/work/browser_profile/
+doc/work/*.log
+doc/work/*.db
+doc/work/*.db*
+[Tt]est[Rr]esults/
+!doc/work/TestResults/
+!doc/work/CoverageReport/
+*.cobertura.xml
+
+# Environment variables
+.env
+!.env.example
