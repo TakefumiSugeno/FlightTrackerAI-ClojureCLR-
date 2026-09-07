@@ -19,7 +19,7 @@
       "args": [
         "-m",
         "flight-tracker-ai.web.server",
-        "5000"
+        "5121"
       ],
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
@@ -59,7 +59,7 @@
       "type": "PowerShell",
       "request": "launch",
       "script": "${workspaceFolder}/scripts/run.ps1",
-      "args": ["-Port", "5000"],
+      "args": ["-Port", "5121"],
       "cwd": "${workspaceFolder}"
     },
     {
