@@ -1,0 +1,9 @@
+{
+  "files.associations": {
+    "*.clj": "clojure",
+    "*.cljr": "clojure",
+    "*.slnx": "xml"
+  },
+  "dotnet.defaultSolution": "FlightTrackerAI.slnx",
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
+}

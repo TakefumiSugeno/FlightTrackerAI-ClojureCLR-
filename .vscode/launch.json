@@ -1,0 +1,72 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FlightTrackerAI: Web サーバー (ClojureCLR デバッグ)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${env:USERPROFILE}/.dotnet/tools/Clojure.Main.exe",
+      "windows": {
+        "program": "${env:USERPROFILE}/.dotnet/tools/Clojure.Main.exe"
+      },
+      "osx": {
+        "program": "${env:HOME}/.dotnet/tools/Clojure.Main"
+      },
+      "linux": {
+        "program": "${env:HOME}/.dotnet/tools/Clojure.Main"
+      },
+      "args": [
+        "-m",
+        "flight-tracker-ai.web.server",
+        "5000"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "CLOJURE_LOAD_PATH": "${workspaceFolder}/src/FlightTrackerAI.Core;${workspaceFolder}/src/FlightTrackerAI.Infrastructure;${workspaceFolder}/src/FlightTrackerAI.Web;${workspaceFolder}/src/FlightTrackerAI.Web/bin/Debug/net10.0"
+      }
+    },
+    {
+      "name": "FlightTrackerAI: 全テスト実行 (ClojureCLR デバッグ)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${env:USERPROFILE}/.dotnet/tools/Clojure.Main.exe",
+      "windows": {
+        "program": "${env:USERPROFILE}/.dotnet/tools/Clojure.Main.exe"
+      },
+      "osx": {
+        "program": "${env:HOME}/.dotnet/tools/Clojure.Main"
+      },
+      "linux": {
+        "program": "${env:HOME}/.dotnet/tools/Clojure.Main"
+      },
+      "args": [
+        "-i",
+        "test/test_runner.clj"
+      ],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "CLOJURE_LOAD_PATH": "${workspaceFolder}/src/FlightTrackerAI.Core;${workspaceFolder}/test/FlightTrackerAI.Core.Tests;${workspaceFolder}/src/FlightTrackerAI.Infrastructure;${workspaceFolder}/test/FlightTrackerAI.Infrastructure.Tests;${workspaceFolder}/src/FlightTrackerAI.Web;${workspaceFolder}/test/FlightTrackerAI.Web.Tests;${workspaceFolder}/test;${workspaceFolder}/src/FlightTrackerAI.Web/bin/Debug/net10.0"
+      }
+    },
+    {
+      "name": "FlightTrackerAI: Web サーバー (PowerShell 起動)",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/scripts/run.ps1",
+      "args": ["-Port", "5000"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "FlightTrackerAI: プロセスにアタッチ (.NET CoreCLR)",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}
