@@ -1,0 +1,103 @@
+# AGENTS
+
+## 構成
+
+- `request.md`
+  - 要件定義ドキュメント（AIへのインプット原典）
+- `doc/`
+  - 仕様書などのドキュメントのルートディレクトリ
+- `doc/spec.md`
+  - システム仕様書
+- `doc/design_detail.md`
+  - 詳細設計書
+- `doc/workflow.md`
+  - SDD ワークフロー詳細手順
+- `doc/mock/`
+  - UIモック・ワイヤーフレーム・画面プロトタイプ配置ディレクトリ
+- `doc/tasks/`
+  - タスク管理ドキュメントの配置ディレクトリ
+- `doc/tasks/YYYYMMDD-HHMMSS_[タスク概要]/tasks.md`
+  - 未着手タスクごとに独立作成される個別のタスク管理ファイル
+- `doc/tasks/YYYYMMDD-HHMMSS_[タスク概要]/reviews.md`
+  - 該当タスクに関するサブエージェント批判的レビュー記録ドキュメント
+- `doc/work/`
+  - 開発に必要なテンポラリのディレクトリ（bugs.md 等のバグ管理）
+- `src/`
+  - ソースコードのルートディレクトリ (`src/[Project]/[Path]/[FileName].fs`)
+- `test/`
+  - テストコードのルートディレクトリ（ソースコードと 1:1 対応: `test/[Project].Tests/[Path]/[FileName]Tests.fs`）
+
+## 運用ルール
+
+### 基本原則: 仕様書駆動開発（Specification-Driven Development）
+
+> **原則**: ドキュメントおよびUIモックを更新し、ユーザと合意してから実装に移行する。合意なしに実装を開始してはならない。
+
+開発は必ず以下のフローで進める:
+
+1. **タスク計画・レビューと合意** — ユーザ指示をタスク計画に構造化し、サブエージェントレビュー（「ユーザー」「SE/PG」ロール）後にユーザ合意を得る。
+2. **仕様・設計・UIモックの更新と合意** — 仕様書・設計書・UIモックを作成・更新し、サブエージェントレビュー後にユーザ合意を得る。
+3. **実装・検証サイクル** — TDD で実装し、サブエージェントレビュー → 指摘対応 → ユーザ最終確認のサイクルを回す。
+4. **ドキュメント事後同期** — 実装で生じた仕様変更をドキュメントに反映する。
+
+> 各ステップの詳細な手順は `doc/workflow.md` を参照。
+
+### ソースコードとテストコードの 1:1 対応規約
+
+- ソースコードとテストコードは **1：1 の対応関係** とし、ファイル名およびディレクトリ構造から対応関係を直接推測できるように命名・配置する。
+  - **命名規則**: `src/[Project]/[Path]/[FileName].fs` ⇔ `test/[Project].Tests/[Path]/[FileName]Tests.fs`
+  - 例: `src/FlightTrackerAI.Core/Domain.fs` ⇔ `test/FlightTrackerAI.Core.Tests/DomainTests.fs`
+  - 例: `src/FlightTrackerAI.Infrastructure/TaskRepository.fs` ⇔ `test/FlightTrackerAI.Infrastructure.Tests/TaskRepositoryTests.fs`
+- 型定義・ロジック・DTO・リポジトリ等の実装ファイルごとに対応するテストファイルを必ず用意し、テストの分散・不透明化を防止する。
+- 複数コンポーネントを跨ぐ結合・E2Eテストは `test/[Project].Tests/Integration/` 等に配置し、単体テストと明確に分離する。
+
+### テスト実行とレポート出力規約 (合否一覧 & カバレッジレポート)
+
+- テスト実行時は、単にコンソールで合否判定を行うだけでなく、必ず **以下2つのHTML視覚レポートを出力・確認** すること。
+  1. **テストケース合否レポート (OK/NG一覧)**: `doc/work/TestResults/TestResults.html`
+     - 全テストケース名、OK(✔)/NG(❌)、所要時間、失敗時の期待値・実際値差分およびスタックトレースを明示。
+  2. **コードカバレッジレポート (網羅率%)**: `doc/work/CoverageReport/index.html`
+     - 全体およびファイルごとの行・ブランチ網羅率、実行行(緑)/未実行行(赤)のソースコード可視化。
+- **標準実行コマンド**: `./scripts/test.ps1` または `dotnet test --results-directory doc/work/TestResults --logger "html;logfilename=TestResults.html" --collect:"XPlat Code Coverage"`
+- **目標カバレッジ**: デフォルト 80% 以上を維持し、未達の場合はテストケース（境界値・異常系）を追加すること。
+
+### 合意レベル
+
+タスクの規模に応じて、必要な合意回数を調整する。
+
+| レベル | 対象 | 必要な合意 |
+| :--- | :--- | :--- |
+| **L1 (軽微)** | バグ修正、typo、軽微なリファクタ | 実装後の最終確認のみ（1回） |
+| **L2 (中規模)** | 新機能追加、UI変更 | 設計合意 + 最終確認（2回） |
+| **L3 (大規模)** | アーキテクチャ変更、破壊的変更 | 全ステップで合意（4回） |
+
+### タスク管理・ディレクトリ運用方針
+
+- 未着手のタスクごとに `doc/tasks/YYYYMMDD-HHMMSS_[タスク概要]/` 形式の命名規則で独立したフォルダを作成する。
+- フォルダ内に `tasks.md` (タスク計画・進捗) および `reviews.md` (批判的レビュー記録) を配置して管理する。
+
+### 自動フォーマット
+
+- **.NET / F# ソース・テストコード**: `dotnet format`
+- **Markdown / Web資産 (HTML, JS, CSS)**: `npx prettier --write` またはプロジェクト標準フォーマッタ
+
+### ブランチ運用
+
+- 開発ブランチ: `alpha`
+- 全てのコミットは `alpha` ブランチ上で行う。
+
+### コミット規約
+
+Conventional Commits に準拠する:
+- `feat:` 新機能
+- `fix:` バグ修正
+- `docs:` ドキュメント変更
+- `refactor:` リファクタリング
+- `test:` テスト追加・修正
+- `chore:` ビルド・設定変更
+
+### コミットポリシー
+
+- **実装コミット**: コード + テストの変更をまとめて1コミット。
+- **ドキュメントコミット**: 仕様・設計・レビュー記録の変更をまとめて1コミット。
+- `reviews.md` の更新のみでコミットしない（次の実装またはドキュメントコミットに含める）。
