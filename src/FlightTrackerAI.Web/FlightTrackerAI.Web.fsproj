@@ -1,16 +1,21 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <TargetFramework>net10.0</TargetFramework>
-    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <OutputType>Exe</OutputType>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\FlightTrackerAI.Core\FlightTrackerAI.Core.csproj" />
     <ProjectReference Include="..\FlightTrackerAI.Infrastructure\FlightTrackerAI.Infrastructure.csproj" />
   </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Clojure" Version="1.12.2" />
     <Content Include="**/*.clj" Exclude="bin/**;obj/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
-

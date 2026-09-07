@@ -4,7 +4,7 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FlightTrackerAI.Web\FlightTrackerAI.Web.csproj" />
+    <ProjectReference Include="..\..\src\FlightTrackerAI.Web\FlightTrackerAI.Web.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Clojure" Version="1.12.2" />

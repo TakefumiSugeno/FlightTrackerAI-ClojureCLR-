@@ -10,7 +10,7 @@
             [flight-tracker-ai.infrastructure.app-logger :as logger]
             [clojure.string :as str])
   (:import [System.Net HttpListener HttpListenerContext]
-           [System.IO StreamReader]
+           [System.IO File StreamReader]
            [System.Text Encoding]
            [System.Threading Thread ThreadPool WaitCallback ThreadStart]))
 
@@ -45,6 +45,15 @@
               content (dash/render-dashboard-content tasks)
               full-html (layout/base-layout "ダッシュボード" content)]
           (write-response resp 200 "text/html; charset=utf-8" full-html))
+
+        ;; Favicon
+        (and (= method "GET") (= raw-url "/favicon.svg"))
+        (let [candidates ["wwwroot/favicon.svg"
+                          "src/FlightTrackerAI.Web/wwwroot/favicon.svg"]
+              fav-file (first (filter #(File/Exists %) candidates))]
+          (if fav-file
+            (write-response resp 200 "image/svg+xml" (File/ReadAllText fav-file))
+            (write-response resp 404 "text/plain" "Not Found")))
 
         ;; API endpoints
         (.StartsWith raw-url "/api/")

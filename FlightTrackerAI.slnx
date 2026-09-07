@@ -2,7 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/FlightTrackerAI.Core/FlightTrackerAI.Core.csproj" />
     <Project Path="src/FlightTrackerAI.Infrastructure/FlightTrackerAI.Infrastructure.csproj" />
-    <Project Path="src/FlightTrackerAI.Web/FlightTrackerAI.Web.csproj" />
+    <Project Path="src/FlightTrackerAI.Web/FlightTrackerAI.Web.fsproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/FlightTrackerAI.Core.Tests/FlightTrackerAI.Core.Tests.csproj" />
