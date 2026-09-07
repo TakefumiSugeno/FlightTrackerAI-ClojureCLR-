@@ -55,8 +55,8 @@
 
 ### 3.1 技術スタック
 
-- **バックエンド言語**: F# (.NET 10) - 関数型言語による堅牢かつ高保守性な実装
-- **Webフレームワーク / UI**: ASP.NET Core + Giraffe / Falco、または Minimal API + 軽量フロントエンド（HTMX / Alpine.js / Tailwind CSS）
+- **バックエンド言語**: ClojureCLR (.NET 10) - Lisp / 関数型言語による堅牢かつ高い柔軟性を備えた実装
+- **Webフレームワーク / UI**: ASP.NET Core Kestrel + Minimal API ホスト + ClojureCLR 関数ハンドラー / 軽量フロントエンド（HTMX / Alpine.js / Tailwind CSS）
 - **ブラウザ自動化 / スクレイピング**: Microsoft.Playwright (.NET) (シングルトンブラウザ管理 + コンテキスト分離)
 - **データベース**: SQLite（軽量・WALモード・外部キー制約有効化）
 - **AI連携**: OpenRouter API（Claude 3.5 Sonnet / GPT-4o-mini / DeepSeek 等を目的に応じて柔軟に切り替え）

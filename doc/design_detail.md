@@ -1,6 +1,6 @@
-# 詳細設計書 (Detailed Design) - FlightTrackerAI
+# 詳細設計書 (Detailed Design) - FlightTrackerAI (ClojureCLR on .NET 10)
 
-本書は、「FlightTrackerAI」の内部アーキテクチャ、F#ドメイン型定義、データベーススキーマ、フロントエンド実装方式（F# ViewEngine / Fable）、スクレイピングエンジン、AI連携、およびUIモックとの整合性を定義します。
+本書は、「FlightTrackerAI」の内部アーキテクチャ、ClojureCLR (.NET 10) ドメイン設計、データベーススキーマ、フロントエンド実装方式（Hiccup風 HTML DSL / HTMX）、スクレイピングエンジン、AI連携、およびUIモックとの整合性を定義します。
 
 ---
 
@@ -9,210 +9,188 @@
 「**Functional Core, Imperative Shell**（関数型コア・命令型シェル）」パターンを採用し、純粋関数で書かれた堅牢なビジネスロジックと、外部I/O（Web、Playwright、DB、HTTPクライアント）を明確に分離します。
 
 ```text
-FlightTrackerAI/
+FlightTrackerAI(ClojureCLR)/
+├── deps.edn                           # Clojure CLI 依存・クラスパス定義 (cljr 互換)
+├── dotnet-tools.json                  # .NET ローカルツール (clojure.cljr, clojure.main)
+├── FlightTrackerAI.slnx               # .NET 10 ソリューション
 ├── src/
-│   ├── FlightTrackerAI.Core/              # [Core - net10.0] ドメイン型、バリデーション、純粋関数
-│   │   ├── Domain.fs                      # 基本型・エンティティ・判別共用体・セグメント定義
-│   │   ├── Dto.fs                         # JSON/DBシリアライズ用DTOおよび変換関数
-│   │   ├── Validation.fs                  # 入力検証・Result型パイプライン
-│   │   └── Analysis.fs                    # 価格変動・最安値計算・トレンド分析
+│   ├── FlightTrackerAI.Core/          # ドメイン型、バリデーション、純粋関数
+│   │   ├── flight_tracker_ai/core/
+│   │   │   ├── domain.clj             # 基本型・データ構造・状態定義
+│   │   │   ├── dto.clj                # JSON/DBシリアライズ用DTOおよび変換関数
+│   │   │   ├── validation.clj         # 入力検証（境界値・日付・IATA）
+│   │   │   └── analysis.clj           # 価格変動・最安値計算・エラー理由変換
+│   │   └── FlightTrackerAI.Core.csproj
 │   │
-│   ├── FlightTrackerAI.Infrastructure/    # [Infrastructure - net10.0] 外部I/O・アダプター
-│   │   ├── Database.fs                    # SQLite接続 (WAL, FK有効化)・設定管理・CRUD・パージ
-│   │   ├── PlaywrightManager.fs           # ブラウザシングルトン・Stealth・Cookie管理
-│   │   ├── Scrapers/
-│   │   │   ├── GoogleFlightsScraper.fs    # Google Flights スクレイピング & セグメントパース
-│   │   │   └── SkyscannerScraper.fs       # Skyscanner スクレイピング & セグメントパース
-│   │   ├── OpenRouterClient.fs            # OpenRouter API クライアント
-│   │   └── WebhookNotifier.fs             # Discord / Slack Webhook通知
+│   ├── FlightTrackerAI.Infrastructure/ # 外部I/O・アダプター
+│   │   ├── flight_tracker_ai/infrastructure/
+│   │   │   ├── app_logger.clj         # ログ出力
+│   │   │   ├── scraper_common.clj     # await-task, with-scraper-lock, Playwright 共通基盤
+│   │   │   ├── database.clj           # SQLite接続 (WAL, FK有効化, busy_timeout)・マイグレーション
+│   │   │   ├── settings_repository.clj # システム設定 CRUD
+│   │   │   ├── task_repository.clj    # 監視タスク CRUD
+│   │   │   ├── flight_repository.clj  # 便スナップショット・巡回ログ保存
+│   │   │   ├── notification.clj       # Discord / Slack Webhook通知
+│   │   │   ├── ai_client.clj          # OpenRouter API クライアント
+│   │   │   ├── google_flights_scraper.clj # Google Flights スクレイピング & パース
+│   │   │   ├── skyscanner_scraper.clj # Skyscanner スクレイピング & パース
+│   │   │   └── scraping_worker.clj    # 定期巡回・排他制御・手動支援連携
+│   │   └── FlightTrackerAI.Infrastructure.csproj
 │   │
-│   └── FlightTrackerAI.Web/               # [Entrypoint & Web UI - net10.0]
-│       ├── Views/                         # Giraffe ViewEngine (F# サーバーサイドHTML DSL)
-│       │   ├── Layout.fs                  # 基本HTML骨格・Tailwind・Chart.js
-│       │   ├── Dashboard.fs               # カード表示 & Excel風リストテーブル
-│       │   └── Components.fs              # 旅程タイムライン、フィルタバー、モーダル
-│       ├── Client/                        # (オプション) Fable (F# to JS) / Alpine.js 対話処理
-│       ├── ApiHandlers.fs                 # JSON REST API エンドポイント (`/api/*`)
-│       ├── FragmentHandlers.fs            # HTMX フラグメントエンドポイント (`/fragments/*`)
-│       ├── BackgroundWorker.fs            # 定期巡回（デフォルト12h）・自動完了・パージ常駐サービス
-│       └── Program.fs                     # アプリケーション起動・DI設定
+│   └── FlightTrackerAI.Web/           # Web UI & API ホスト
+│       ├── flight_tracker_ai/web/
+│       │   ├── views/
+│       │   │   ├── html_dsl.clj       # 純粋関数 Hiccup 風 HTML レンダリングエンジン
+│       │   │   ├── layout.clj         # 基本HTML骨格・Tailwind・Chart.js
+│       │   │   ├── dashboard.clj      # カード表示 & Excel風リスト・AI入力エリア
+│       │   │   └── modals.clj         # 旅程タイムライン、設定、新規/編集、クイックメモ
+│       │   ├── controllers/
+│       │   │   └── api_controller.clj # JSON REST API エンドポイント
+│       │   └── server.clj             # Ringライクなリクエスト/レスポンスハンドラー配線
+│       ├── Program.cs                 # ASP.NET Core Kestrel エントリポイント & HttpContext 変換
+│       └── FlightTrackerAI.Web.csproj
 │
 └── test/
-    ├── FlightTrackerAI.Core.Tests/        # ドメインロジック単体テスト
-    ├── FlightTrackerAI.Infrastructure.Tests/ # DB・パース検証テスト
-    └── FlightTrackerAI.Infrastructure.Tests/Fixtures/ # オフラインHTMLフィクスチャ
+    ├── FlightTrackerAI.Core.Tests/
+    │   ├── domain_tests.clj
+    │   ├── dto_tests.clj
+    │   ├── validation_tests.clj
+    │   ├── analysis_tests.clj
+    │   └── DomainTests.cs             # xUnit テストブリッジ (個別テストケース動的列挙)
+    ├── FlightTrackerAI.Infrastructure.Tests/
+    │   ├── app_logger_tests.clj
+    │   ├── database_tests.clj
+    │   ├── settings_repository_tests.clj
+    │   ├── task_repository_tests.clj
+    │   ├── flight_repository_tests.clj
+    │   ├── notification_tests.clj
+    │   ├── ai_client_tests.clj
+    │   ├── scraper_common_tests.clj
+    │   ├── google_flights_scraper_tests.clj
+    │   ├── skyscanner_scraper_tests.clj
+    │   ├── scraping_worker_tests.clj
+    │   ├── Fixtures/                  # オフライン HTML フィクスチャ
+    │   └── InfrastructureTests.cs     # xUnit テストブリッジ (個別テストケース動的列挙)
+    └── FlightTrackerAI.Web.Tests/
+        ├── views/
+        │   ├── layout_tests.clj
+        │   ├── dashboard_tests.clj
+        │   └── modals_tests.clj
+        ├── controllers/
+        │   └── api_controller_tests.clj
+        ├── server_tests.clj
+        ├── integration/
+        │   └── integration_flow_tests.clj
+        └── WebTests.cs                # xUnit テストブリッジ (個別テストケース動的列挙)
+```
+
+### 1.1 ビルド・依存関係および `.clj` ファイル配置規約
+
+- **依存性の正本**: 各 `.csproj` (NuGet) をビルドおよびパッケージ依存性の正本とします。`deps.edn` は Clojure CLI ツールとの連携用補助設定として整合させます。
+- **.clj ファイルの出力配置**: 各 `.csproj` に `<None Update="**\*.clj" CopyToOutputDirectory="PreserveNewest" />` を定義し、ビルド成果物ディレクトリ（`bin/`）へ `.clj` ファイルが確実にコピーされ、ClojureCLR の `CLOJURE_LOAD_PATH` から透過的にロードできるようにします。
+
+---
+
+## 2. フロントエンド実装方式および Web ホスティング設計
+
+### 2.1 採用アーキテクチャ: `Hiccup風 HTML DSL (Clojure)` + `HTMX`
+
+- **サーバーサイド レンダリング (SSR)**:
+  - Clojure 標準のデータ構造（ベクタ・マップ・キーワード）を用いた **Hiccup 風 HTML 生成エンジン (`html_dsl.clj`)** を採用。
+  - マークアップをすべて純粋関数（`[:div {:class "..."} ...]`）として記述。ドメインデータ構造から安全・高速に HTML 文字列へ変換。
+- **動的更新 & 画面対話**:
+  - **HTMX**: ページ全体の再読み込みを行わず、タスクの登録・削除・即時実行・フィルタリング時にサーバーから返却される HTML フラグメント（`/fragments/*`）を部分置換。
+- **クライアント側インタラクティブ処理**:
+  - Excel風テーブルのインクリメンタル絞り込み・ソート、アクティブフィルタチップバーの同期、および Chart.js との連携を Vanilla JS で軽量に実装。
+  - 表示切り替え（カード ⇔ リスト）を行っても、絞り込み状態や検索語句が破棄されずシームレスに維持されるクライアント状態管理を担保。
+
+### 2.2 ASP.NET Core Minimal API ⇔ ClojureCLR ハンドラー配線
+
+C# の `Program.cs` は薄い Minimal API ホストとして振る舞い、受信した `HttpContext` を Ring 互換のリクエストマップに変換して ClojureCLR の `flight-tracker-ai.web.server/app` ハンドラーへ委譲します。
+
+```csharp
+// Program.cs のルーティングブリッジ概念
+app.Map("{*path}", async (HttpContext ctx) => {
+    var reqMap = Bridge.ToRingRequest(ctx);
+    var resMap = await Task.Run(() => ClojureRuntime.InvokeHandler(reqMap));
+    await Bridge.WriteRingResponseAsync(ctx, resMap);
+});
 ```
 
 ---
 
-## 2. フロントエンド実装方式の検討・選定
+## 3. ドメイン設計 (Domain Models in ClojureCLR)
 
-フロントエンドにおける「F#コード資産の最大活用」と「軽量・高速・高保守性」を実現するため、以下の方式を採用します:
+```clojure
+(ns flight-tracker-ai.core.domain
+  (:import [System Guid DateTimeOffset DateOnly Char]))
 
-### 2.1 採用アーキテクチャ: `Giraffe ViewEngine` + `HTMX` (+ `Fable` 拡張)
+;; IATAコード: 3文字の英字
+(defn create-iata-code [s]
+  (let [trimmed (when s (.ToUpperInvariant (.Trim (str s))))]
+    (if (and (= 3 (count trimmed))
+             (every? #(Char/IsLetter %) trimmed))
+      {:ok trimmed}
+      {:error "IATAコードは3文字の英字である必要があります"})))
 
-- **サーバーサイド レンダリング (SSR)**:
-  - F# 標準の HTML DSL である **Giraffe ViewEngine**（または **Falco**）を採用。
-  - HTMLマークアップをすべて F# の型安全な関数（`div [_class "..."] [ ... ]`）として記述。これにより、ドメイン型（`FlightTask`, `FlightOffer`, `FlightSegment`）の変更が即座にコンパイル時エラーとして検知され、テンプレートの型不整合を完全に防止。
-- **動的更新 & 画面対話**:
-  - **HTMX**: ページ全体の再読み込みを行わず、タスクの登録・削除・即時実行・フィルタリング時にサーバーから返却される F# HTML フラグメント（`/fragments/*`）を部分置換。
-- **クライアント側インタラクティブ処理 (Fable 連携)**:
-  - Excel風テーブルのインクリメンタル絞り込み・ソート、および Chart.js との連携において、必要に応じて **Fable**（F# から JavaScript へのトランスパイル）を利用。
-  - F# で書いたドメインロジック（価格ソート、日付計算、フィルタリング関数）をクライアント・サーバー双方で 100% 共有可能。
-
----
-
-## 3. ドメイン型定義 (Domain Models)
-
-```fsharp
-namespace FlightTrackerAI.Core
-
-open System
-
-/// 空港・都市コード (3レターIATAコード)
-type IataCode = private IataCode of string
-module IataCode =
-    let create (s: string) =
-        let trimmed = s.Trim().ToUpperInvariant()
-        if trimmed.Length = 3 && trimmed |> Seq.forall Char.IsLetter then
-            Ok (IataCode trimmed)
-        else
-            Error "IATAコードは3文字の英字である必要があります"
-    let value (IataCode code) = code
-
-/// 許容乗継回数
-type MaxStops =
-    | DirectOnly
-    | MaxStops of int
-    | AnyStops
-
-/// 旅行タイプ
-type TripType =
-    | OneWay of Outbound: DateOnly
-    | RoundTrip of Outbound: DateOnly * Inbound: DateOnly
-
-/// タスク状態
-type TaskStatus =
-    | Active
-    | Paused
-    | Running
-    | Completed
-    | Error of message: string
-
-/// スクレイピング対象プロバイダー
-type ScrapingProvider =
-    | GoogleFlights
-    | Skyscanner
-
-/// 各区間のフライト詳細セグメント（乗継・往復別社対応）
-type FlightSegment = {
-    LegIndex: int                     // 0: 往路, 1: 復路
-    SegmentIndex: int                 // 乗継区間順 (0, 1, 2...)
-    DepartureAirport: string          // 例: "HND"
-    ArrivalAirport: string            // 例: "SIN"
-    MarketingAirline: string          // 販売航空会社 (例: "全日空")
-    OperatingAirline: string option   // 運航会社 (コードシェア時, 例: "シンガポール航空")
-    FlightNumber: string option       // 例: "NH841"
-    DepartureTime: DateTimeOffset     // 出発空港の現地ローカル日時 (タイムゾーンOffset保持)
-    ArrivalTime: DateTimeOffset       // 到着空港の現地ローカル日時 (タイムゾーンOffset保持)
-    FlightDurationMinutes: int        // フライト時間 (分: タイムゾーン跨ぎを考慮した実飛行時間)
-    LayoverMinutesNext: int option    // トランジット時間 (分: 同一空港での次便までの待ち時間)
-}
-
-/// 監視タスクエンティティ
-type FlightTask = {
-    Id: Guid
-    Title: string
-    Origin: IataCode
-    Destination: IataCode
-    TripType: TripType
-    MaxStops: MaxStops
-    PreferredAirlines: string list
-    TargetPriceJpy: int option
-    CheckIntervalHours: int             // 個別指定 (未指定時はグローバル設定)
-    NotificationWebhookUrl: string option
-    UserNotes: string option            // ユーザー自由メモ・要望・制約 (Markdown/YAML対応)
-    Status: TaskStatus
-    ConsecutiveFailures: int
-    CreatedAt: DateTimeOffset
-    UpdatedAt: DateTimeOffset
-    LastCheckedAt: DateTimeOffset option
-    LastLowestPriceJpy: int option
-    LastLowestAirlines: string option   // 最新最安値の航空会社まとめ表記 (例: "ANA + SQ")
-    LastLowestProvider: ScrapingProvider option // 最安値を提示したプロバイダー (GoogleFlights / Skyscanner)
-}
-
-/// 収集された便情報スナップショット（1回の巡回で上位複数便を保存）
-type FlightOffer = {
-    Id: Guid
-    TaskId: Guid
-    RunLogId: Guid
-    Provider: ScrapingProvider
-    AirlinesSummary: string            // 例: "エールフランス", "JAL / AF", "ANA + SQ"
-    DepartureTime: DateTimeOffset
-    ArrivalTime: DateTimeOffset
-    TotalDurationMinutes: int          // 総所要時間 (分)
-    StopsCount: int                    // 乗継回数
-    Segments: FlightSegment list       // 往路・復路・乗継の全詳細セグメント
-    PriceJpy: int                      // 日本円総額
-    BookingUrl: string
-    CapturedAt: DateTimeOffset         // データ取得日時
-}
-
-/// システム全体設定エンティティ
-type SystemSettings = {
-    DefaultCheckIntervalHours: int     // デフォルト巡回間隔（初期値: 12時間）
-    DefaultWebhookUrl: string option   // グローバル Discord / Slack Webhook
-    OpenRouterApiKey: string option    // AI支援用 API キー
-    EnableGoogleFlights: bool          // Google Flights 有効フラグ
-    EnableSkyscanner: bool             // Skyscanner 有効フラグ
-}
+;; 目標達成バッジ判定（派生状態）
+(defn target-achieved? [task]
+  (and (= :active (:status task))
+       (:target-price-jpy task)
+       (:last-lowest-price-jpy task)
+       (<= (:last-lowest-price-jpy task) (:target-price-jpy task))))
 ```
 
 ---
 
 ## 4. UIモックとドメイン設計の1:1 整合性対応表 (Cross-Verification Matrix)
 
-UIモック（`doc/mock/index.html`）に存在する全画面要素・フォーム項目・表示項目が、ドメイン型およびSQLiteスキーマと 100% 整合していることを検証・定義します。
-
-| UI画面・コンポーネント     | UIモックの表示・入力項目               | F# ドメイン型・フィールド                                   | SQLite カラム定義                              | 整合確認 |
-| :------------------------- | :------------------------------------- | :---------------------------------------------------------- | :--------------------------------------------- | :------: |
-| **ヘッダー**               | 巡回ワーカー稼働ステータス             | `BackgroundWorker` 状態                                     | N/A (メモリ常駐状態)                           |    OK    |
-| **全体設定モーダル**       | 全体デフォルト巡回間隔 (12h)           | `SystemSettings.DefaultCheckIntervalHours`                  | `system_settings.default_check_interval_hours` |    OK    |
-|                            | グローバル Webhook URL                 | `SystemSettings.DefaultWebhookUrl`                          | `system_settings.default_webhook_url`          |    OK    |
-|                            | OpenRouter API Key                     | `SystemSettings.OpenRouterApiKey`                           | `system_settings.openrouter_api_key`           |    OK    |
-|                            | プロバイダー有効化 (Google/Skyscanner) | `SystemSettings.EnableGoogleFlights / Skyscanner`           | `enable_google_flights / skyscanner`           |    OK    |
-| **タスク登録 / 編集**      | 出発地 (都市名/IATA)                   | `FlightTask.Origin` (`IataCode`)                            | `tasks.origin` (TEXT)                          |    OK    |
-|                            | 目的地 (都市名/IATA)                   | `FlightTask.Destination` (`IataCode`)                       | `tasks.destination` (TEXT)                     |    OK    |
-|                            | 旅行タイプ (往復/片道)                 | `FlightTask.TripType` (`OneWay / RoundTrip`)                | `tasks.trip_type` (TEXT)                       |    OK    |
-|                            | 往路・復路出発日                       | `TripType.Outbound / Inbound` (`DateOnly`)                  | `tasks.outbound_date / inbound_date`           |    OK    |
-|                            | 許容乗継回数                           | `FlightTask.MaxStops` (`DirectOnly / 1 / Any`)              | `tasks.max_stops` (TEXT)                       |    OK    |
-|                            | 目標アラート価格 (JPY)                 | `FlightTask.TargetPriceJpy` (`int option`)                  | `tasks.target_price_jpy` (INTEGER)             |    OK    |
-|                            | 巡回間隔                               | `FlightTask.CheckIntervalHours` (`int`)                     | `tasks.check_interval_hours` (INTEGER)         |    OK    |
-|                            | 優先航空会社                           | `FlightTask.PreferredAirlines` (`string list`)              | `tasks.preferred_airlines` (TEXT/JSON)         |    OK    |
-|                            | **ユーザーメモ / 要望**                | `FlightTask.UserNotes` (`string option`)                    | `tasks.user_notes` (TEXT)                      |    OK    |
-| **タスクカード / 一覧**    | 区間・空港通称名                       | `Origin` / `Destination` + 空港名                           | `tasks.origin / destination`                   |    OK    |
-|                            | 日程・発着時刻                         | `TripType` + 発着時刻                                       | `tasks.outbound_date / inbound_date`           |    OK    |
-|                            | ユーザーメモ・要望表示                 | `FlightTask.UserNotes` (`string option`)                    | `tasks.user_notes` (TEXT)                      |    OK    |
-|                            | ステータス (達成/監視/停止/エラー)     | `FlightTask.Status` (`TaskStatus`)                          | `tasks.status` (TEXT)                          |    OK    |
-|                            | 最安航空会社まとめ (往/復)             | `FlightTask.LastLowestAirlines` (`string option`)           | `tasks.last_lowest_airlines` (TEXT)            |    OK    |
-|                            | 現在最安値 (JPY)                       | `FlightTask.LastLowestPriceJpy` (`int option`)              | `tasks.last_lowest_price_jpy` (INTEGER)        |    OK    |
-|                            | **最安提供ソース (Google/Skyscanner)** | `FlightTask.LastLowestProvider` (`ScrapingProvider option`) | `tasks.last_lowest_provider` (TEXT)            |    OK    |
-|                            | **データ取得日時 (年+日時 JST)**       | `FlightTask.LastCheckedAt` (`DateTimeOffset option`)        | `tasks.last_checked_at` (TEXT)                 |    OK    |
-| **詳細: 旅程タイムライン** | 往路/復路区分                          | `FlightSegment.LegIndex` (`0: 往, 1: 復`)                   | `segments_json -> LegIndex`                    |    OK    |
-|                            | 出発/到着空港                          | `FlightSegment.DepartureAirport / ArrivalAirport`           | `segments_json -> DepartureAirport`            |    OK    |
-|                            | 各区間航空会社・便名                   | `FlightSegment.MarketingAirline / FlightNumber`             | `segments_json -> MarketingAirline`            |    OK    |
-|                            | 発着時刻                               | `FlightSegment.DepartureTime / ArrivalTime`                 | `segments_json -> DepartureTime`               |    OK    |
-|                            | **フライト時間**                       | `FlightSegment.FlightDurationMinutes` (`int`)               | `segments_json -> FlightDurationMinutes`       |    OK    |
-|                            | **トランジット時間**                   | `FlightSegment.LayoverMinutesNext` (`int option`)           | `segments_json -> LayoverMinutesNext`          |    OK    |
-|                            | **総所要時間**                         | `FlightOffer.TotalDurationMinutes` (`int`)                  | `flight_snapshots.total_duration_minutes`      |    OK    |
-|                            | **各便金額 (総額)**                    | `FlightOffer.PriceJpy` (`int`)                              | `flight_snapshots.price_jpy` (INTEGER)         |    OK    |
-|                            | データ取得日時                         | `FlightOffer.CapturedAt` (`DateTimeOffset`)                 | `flight_snapshots.captured_at` (TEXT)          |    OK    |
-|                            | 予約リンク                             | `FlightOffer.BookingUrl` (`string`)                         | `flight_snapshots.booking_url` (TEXT)          |    OK    |
+| UI画面・コンポーネント     | UIモックの表示・入力項目           | ClojureCLR ドメインキー               | SQLite カラム定義                              | 整合確認 |
+| :------------------------- | :--------------------------------- | :------------------------------------ | :--------------------------------------------- | :------: |
+| **ヘッダー**               | 巡回ワーカー稼働ステータス         | `worker-status`                       | N/A (メモリ常駐状態)                           |    OK    |
+| **有頭手動支援ガイダンス** | PRESS & HOLD 解除案内 (UC-10)      | `manual-challenge-event`              | N/A (ランタイム通知)                           |    OK    |
+| **全体設定モーダル**       | 全体デフォルト巡回間隔 (12h)       | `:default-check-interval-hours`       | `system_settings.default_check_interval_hours` |    OK    |
+|                            | グローバル Webhook URL             | `:default-webhook-url`                | `system_settings.default_webhook_url`          |    OK    |
+|                            | OpenRouter API Key                 | `:openrouter-api-key`                 | `system_settings.openrouter_api_key`           |    OK    |
+|                            | プロバイダー有効化                 | `:enable-google-flights / skyscanner` | `enable_google_flights / skyscanner`           |    OK    |
+| **タスク登録 / 編集**      | 出発地 (都市名/IATA)               | `:origin`                             | `tasks.origin` (TEXT)                          |    OK    |
+|                            | 目的地 (都市名/IATA)               | `:destination`                        | `tasks.destination` (TEXT)                     |    OK    |
+|                            | 旅行タイプ (往復/片道)             | `:trip-type`                          | `tasks.trip_type` (TEXT)                       |    OK    |
+|                            | 往路・復路出発日                   | `:outbound-date / :inbound-date`      | `tasks.outbound_date / inbound_date`           |    OK    |
+|                            | 許容乗継回数                       | `:max-stops`                          | `tasks.max_stops` (TEXT)                       |    OK    |
+|                            | 目標アラート価格 (JPY)             | `:target-price-jpy`                   | `tasks.target_price_jpy` (INTEGER)             |    OK    |
+|                            | 巡回間隔                           | `:check-interval-hours`               | `tasks.check_interval_hours` (INTEGER)         |    OK    |
+|                            | 優先航空会社                       | `:preferred-airlines`                 | `tasks.preferred_airlines` (TEXT/JSON)         |    OK    |
+|                            | **ユーザーメモ / 要望**            | `:user-notes`                         | `tasks.user_notes` (TEXT)                      |    OK    |
+| **クイックメモ編集**       | メモ直接更新 (UC-09)               | `:user-notes`                         | `tasks.user_notes` (TEXT)                      |    OK    |
+| **タスクカード / 一覧**    | 区間・空港通称名                   | `:origin / :destination` + 空港名     | `tasks.origin / destination`                   |    OK    |
+|                            | 日程・発着時刻                     | `:trip-type` + 発着時刻               | `tasks.outbound_date / inbound_date`           |    OK    |
+|                            | ユーザーメモ・要望表示             | `:user-notes`                         | `tasks.user_notes` (TEXT)                      |    OK    |
+|                            | ステータス (達成/監視/停止/エラー) | `:status` + `target-achieved?`        | `tasks.status` (TEXT)                          |    OK    |
+|                            | 最安航空会社まとめ (往/復)         | `:last-lowest-airlines`               | `tasks.last_lowest_airlines` (TEXT)            |    OK    |
+|                            | 現在最安値 (JPY)                   | `:last-lowest-price-jpy`              | `tasks.last_lowest_price_jpy` (INTEGER)        |    OK    |
+|                            | 最安提供ソース (Google/Skyscanner) | `:last-lowest-provider`               | `tasks.last_lowest_provider` (TEXT)            |    OK    |
+|                            | データ取得日時 (年+日時 JST)       | `:last-checked-at`                    | `tasks.last_checked_at` (TEXT)                 |    OK    |
+| **詳細: 旅程タイムライン** | 往路/復路区分                      | `:leg-index` (0: 往, 1: 復)           | `segments_json -> LegIndex`                    |    OK    |
+|                            | 各区間航空会社・便名               | `:marketing-airline / :flight-number` | `segments_json -> MarketingAirline`            |    OK    |
+|                            | 発着時刻 (ローカル時刻, (+1)表記)  | `:departure-time / :arrival-time`     | `segments_json -> DepartureTime`               |    OK    |
+|                            | AI買い時分析コメントキャッシュ     | `:ai-analysis-summary`                | `task_run_logs.ai_analysis_summary`            |    OK    |
+|                            | 各便金額 (総額)                    | `:price-jpy`                          | `flight_snapshots.price_jpy` (INTEGER)         |    OK    |
+|                            | 予約リンク                         | `:booking-url`                        | `flight_snapshots.booking_url` (TEXT)          |    OK    |
 
 ---
 
-## 5. データベース物理設計 (SQLite Schema)
+## 5. データベース物理設計 (SQLite Schema & Connection Scoping)
+
+### 5.1 接続スコープ規約 (Connection-Scoped PRAGMA)
+
+`Microsoft.Data.Sqlite` では、接続ごとに PRAGMA を明示適用する必要があります。
+`database.clj` の接続ファクトリにおいて、オープン直後に以下を実行します:
+
+- `PRAGMA foreign_keys = ON;` (外部キー制約の有効化)
+- `PRAGMA busy_timeout = 5000;` (WAL モード下の並行書き込みロック待機タイムアウト)
+
+### 5.2 物理テーブルスキーマ
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -253,7 +231,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     last_checked_at TEXT,
     last_lowest_price_jpy INTEGER,
     last_lowest_airlines TEXT,
-    last_lowest_provider TEXT
+    last_lowest_provider TEXT,
+    ai_analysis_summary TEXT
 );
 
 -- 巡回ログテーブル
@@ -267,6 +246,7 @@ CREATE TABLE IF NOT EXISTS task_run_logs (
     offers_found_count INTEGER NOT NULL DEFAULT 0,
     lowest_price_jpy INTEGER,
     lowest_airlines TEXT,
+    ai_analysis_summary TEXT,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
@@ -297,18 +277,54 @@ CREATE INDEX IF NOT EXISTS idx_run_logs_task ON task_run_logs(task_id);
 
 ---
 
-## 6. スクレイピングアーキテクチャ & アンチBot対策設計
+## 6. スクレイピングアーキテクチャ & Interop 設計
 
-### 6.1 ブラウザプロファイル永続化と排他制御
+### 6.1 非同期 Task 解決 & 排他制御マクロ (`scraper_common.clj`)
 
-- **ユーザーデータディレクトリ**: `doc/work/browser_profile/` を Chromium の `userDataDir` として指定。
-- **永続化対象**: セッションCookie（PerimeterX `_px3`, `_pxhd` 等）、localStorage、サイト認証状態。
-- **ファイルロック競合防止**: `SemaphoreSlim(1, 1)` を用いた巡回実行の排他制御を行い、バックグラウンド巡回と手動即時実行ボタンの衝突（`SingletonLock` 例外）を完全防止。
+```clojure
+(ns flight-tracker-ai.infrastructure.scraper-common
+  (:import [System.Threading.Tasks Task]
+           [System.Threading SemaphoreSlim]))
 
-### 6.2 2段階ステルス巡回シーケンス
+;; Task<T> または ValueTask<T> の安全な解決 (デッドロック防止)
+(defn await-task [^Task task]
+  (.GetResult (.GetAwaiter (.ConfigureAwait task false))))
 
-1. **事前ウォームアップ**: 公式トップページ（`https://www.skyscanner.jp/`）への初期アクセス、Cookie 同意バナーの自動受諾、自然なマウス移動シミュレーション。
-2. **Referer 保持ナビゲーション**: 確立されたコンテキストを維持したまま、`Referer: "https://www.skyscanner.jp/"` を付与して検索結果ページへ遷移。
-3. **Bot 検知時の自動試行 & 手動支援フォールバック**:
-   - `PRESS & HOLD` チャレンジ画面検知時、ボタン要素の中心座標を特定し、`Mouse.DownAsync` ➔ 5秒ホールド ➔ `Mouse.UpAsync` の自動解除を試行。
-   - 有頭ブラウザモード（`IsHeadless = false`）時は最大60秒待機し、ユーザーが1クリック長押し解除すれば即座に認証トークンがプロファイルに保存され、次回の定期ヘッドレス巡回に引き継がれる。
+;; 巡回実行の排他制御 (SemaphoreSlim 1, 1)
+(defonce scraper-lock (SemaphoreSlim. 1 1))
+
+;; 排他制御マクロ
+(defmacro with-scraper-lock [& body]
+  `(do
+     (await-task (.WaitAsync scraper-lock))
+     (try
+       ~@body
+       (finally
+         (.Release scraper-lock)))))
+```
+
+### 6.2 Web API 即時巡回時の非ブロッキング応答
+
+Web API（`POST /api/tasks/:id/run`）が呼ばれた際、`scraper-lock` が既にロック中の場合は HTTP 接続をブロックせず、直ちに `409 Conflict`（「現在別の巡回が実行中です。完了後に再試行してください」）を返却し、画面側で即座に待機トーストを表示します。
+
+### 6.3 2段階ステルス巡回 & 有頭手動支援連携 (UC-10)
+
+1. **事前ウォームアップ**: 公式トップページ（`https://www.skyscanner.jp/`）への初期アクセス、Cookie 同意バナーの自動受諾。
+2. **Referer 保持ナビゲーション**: 確立されたコンテキストを維持したまま検索結果ページへ遷移。
+3. **Bot 検知時の自動試行 & 有頭手動支援連携**:
+   - `PRESS & HOLD` チャレンジ検知時、ボタン要素の中心座標を特定し自動長押し（5.5秒）を試行。
+   - 解除できない場合、有頭ブラウザモード（`IsHeadless = false`）で最大60秒待機。
+   - **WebUI通知連携**: ワーカーが手動支援待機に入った際、WebUIへステータス通知（「認証チャレンジを検知しました。画面上のブラウザで長押しを解除してください（残り◯秒）」）を発行。解除完了時に「認証完了。巡回を再開します」と復帰通知。
+
+---
+
+## 7. テストアーキテクチャ & レポート出力規約
+
+### 7.1 xUnit テストブリッジによる個別テストケース展開 (`TestResults.html`)
+
+`AGENTS.md` の合否一覧規約に準拠するため、C# のテストブリッジクラス（`DomainTests.cs` 等）は、xUnit の `[Theory] [MemberData]` を用いて Clojure の `clojure.test` に定義された各テスト関数（var）を動的に列挙・個別実行します。
+これにより、`TestResults.html` 上で各テストケース名、OK(✔)/NG(❌)、所要時間が個別に可視化されます。
+
+### 7.2 コードカバレッジ収集戦略 (`CoverageReport/index.html`)
+
+ClojureCLR ソースコードのカバレッジを Coverlet で収集するため、ビルド時に AOT コンパイル（`compile`）を実施して物理アセンブリ (`.dll`) と PDB シンボルを生成し、インストルメンテーション対象とします。また、全公開関数に対する正常・境界・異常系のテストケース網羅率 100% を品質基準とします。

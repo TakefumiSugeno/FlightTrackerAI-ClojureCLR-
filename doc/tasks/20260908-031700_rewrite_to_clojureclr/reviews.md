@@ -82,3 +82,49 @@
 ## 2. 是正後のタスク計画反映状況
 
 上記の全指摘事項（Critical 5件, Major 7件, Minor 6件）に対する対応方針を `tasks.md` に反映し、作業項目および受入基準を改訂。
+
+---
+
+## 3. 第2回レビュー結果（仕様・設計・UIモックレビュー）
+
+2026年9月8日、「ユーザー」ロールおよび「SE/PG」ロールのサブエージェントにより、仕様書（`doc/spec.md`）、詳細設計書（`doc/design_detail.md`）、UIモック（`doc/mock/index.html`）、および運用規約（`AGENTS.md`）の批判的レビューを実施。
+
+### 3.1 ユーザーロール指摘と是正完了
+
+**【判定】: 是正完了 (GO - 実装移行承認)**
+
+- [x] **🚨 Critical-01: UC-10（有頭手動支援ガイダンス）の UI モックへの反映欠落**
+  - **対応完了**: `doc/mock/index.html` のメインエリア先頭に、Skyscanner 認証チャレンジ（PRESS & HOLD）検知バナー（残り秒数カウントダウン表示、手動解除シミュレートボタン、解除検知トースト連携）を追加実装。
+- [x] **⚠️ Major-01: システム仕様書（`doc/spec.md`）画面仕様における AI アシスタント入力エリアの記載漏れ**
+  - **対応完了**: `doc/spec.md` 第4章の画面仕様に「AIアシスタント入力エリア（構造化テキスト/自然文入力、テンプレート挿入、新規タスク登録フォーム連携）」を明記。
+- [x] **⚠️ Major-02: 詳細設計書（`doc/design_detail.md`）整合性対応表における手動支援ガイダンスの記載欠落**
+  - **対応完了**: `doc/design_detail.md` 第4章の対応表に「有頭手動支援ガイダンス通知 (UC-10)」を追加。
+- [x] **ℹ️ Minor-01: 即時巡回実行時の排他制御フィードバックシミュレーション**
+  - **対応完了**: `doc/design_detail.md` 6.2節に、ロック競合時の `409 Conflict` 返却および待機トースト通知仕様を規定。
+
+### 3.2 SE/PGロール指摘と是正完了
+
+**【判定】: 是正完了 (GO - 実装移行承認)**
+
+- [x] **🚨 Critical-01: SQLiteにおける `PRAGMA foreign_keys = ON;` の接続スコープ問題とデータ不整合リスク**
+  - **対応完了**: `doc/design_detail.md` 5.1節に接続スコープ規約を定義。オープン直後に `PRAGMA foreign_keys = ON;` および `PRAGMA busy_timeout = 5000;` を明示実行する仕様を策定。
+- [x] **🚨 Critical-02: xUnit テストブリッジによる HTML 合否レポート (`TestResults.html`) のテストケース個別展開**
+  - **対応完了**: `doc/design_detail.md` 7.1節に、xUnit の `[Theory] [MemberData]` を用いて `clojure.test` の各テスト関数を動的列挙し、`TestResults.html` 上で全テストケースが個別に OK/NG 表示されるテストブリッジ仕様を明記。
+- [x] **🚨 Critical-03: ClojureCLR コードカバレッジ (`CoverageReport/index.html`) の収集戦略**
+  - **対応完了**: `doc/design_detail.md` 7.2節に、AOT コンパイル（`compile`）による物理アセンブリ生成と Coverlet 適用、および全公開関数の正常・境界・異常系 100% 網羅基準を定義。
+- [x] **⚠️ Major-01: UIモックにおける有頭手動支援ガイダンスUIの欠落**
+  - **対応完了**: `doc/mock/index.html` にカウントダウン付きバナーを追加。
+- [x] **⚠️ Major-02: ASP.NET Core Minimal API と ClojureCLR ハンドラー配線の具体化**
+  - **対応完了**: `doc/design_detail.md` 2.2節に、C# `Program.cs` ⇔ Clojure Ring互換リクエスト/レスポンスマップの相互変換アダプター仕様を明記。
+- [x] **⚠️ Major-03: AI買い時分析サマリーの永続化スキーマ**
+  - **対応完了**: `doc/design_detail.md` 第5章の `tasks` および `task_run_logs` テーブルに `ai_analysis_summary TEXT` カラムを追加し、APIの二重呼び出しを防止するキャッシュ永続化を設計。
+- [x] **⚠️ Major-04: Web API 即時巡回時の非ブロッキング排他制御**
+  - **対応完了**: `doc/design_detail.md` 6.2節に、`scraper-lock` 競合時の非ブロッキング `409 Conflict` 返却を規定。
+- [x] **⚠️ Major-05: `.csproj` と `deps.edn` の役割分担および `.clj` 出力配置規約**
+  - **対応完了**: `doc/design_detail.md` 1.1節に、`.csproj` を依存性の正本とし、`<None Update="**/*.clj" CopyToOutputDirectory="PreserveNewest" />` による出力配置規約を明記。
+- [x] **ℹ️ Minor-01: `AGENTS.md` のファイル命名規約パターン表記の統一**
+  - **対応完了**: `AGENTS.md` の表記を `src/.../[file_name].clj` ⇔ `test/.../[file_name]_tests.clj` に統一。
+- [x] **ℹ️ Minor-02: `html_dsl.clj` の配置明示**
+  - **対応完了**: `doc/design_detail.md` 第1章のツリーに `views/html_dsl.clj` を追加。
+- [x] **ℹ️ Minor-03: `with-scraper-lock` マクロの提供**
+  - **対応完了**: `doc/design_detail.md` 6.1節に `with-scraper-lock` マクロを定義。

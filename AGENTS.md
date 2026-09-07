@@ -23,9 +23,9 @@
 - `doc/work/`
   - 開発に必要なテンポラリのディレクトリ（bugs.md 等のバグ管理）
 - `src/`
-  - ソースコードのルートディレクトリ (`src/[Project]/[Path]/[FileName].fs`)
+  - ソースコードのルートディレクトリ (`src/[Project]/[Path]/[FileName].clj` / `src/[Project]/[Path]/[FileName].cs`)
 - `test/`
-  - テストコードのルートディレクトリ（ソースコードと 1:1 対応: `test/[Project].Tests/[Path]/[FileName]Tests.fs`）
+  - テストコードのルートディレクトリ（ソースコードと 1:1 対応: `test/[Project].Tests/[Path]/[FileName]Tests.clj` / `test/[Project].Tests/[Path]/[FileName]Tests.cs`）
 
 ## 運用ルール
 
@@ -45,11 +45,11 @@
 ### ソースコードとテストコードの 1:1 対応規約
 
 - ソースコードとテストコードは **1：1 の対応関係** とし、ファイル名およびディレクトリ構造から対応関係を直接推測できるように命名・配置する。
-  - **命名規則**: `src/[Project]/[Path]/[FileName].fs` ⇔ `test/[Project].Tests/[Path]/[FileName]Tests.fs`
-  - 例: `src/FlightTrackerAI.Core/Domain.fs` ⇔ `test/FlightTrackerAI.Core.Tests/DomainTests.fs`
-  - 例: `src/FlightTrackerAI.Infrastructure/TaskRepository.fs` ⇔ `test/FlightTrackerAI.Infrastructure.Tests/TaskRepositoryTests.fs`
+  - **命名規則**: `src/[Project]/[Path]/[file_name].clj` ⇔ `test/[Project].Tests/[Path]/[file_name]_tests.clj` (C#ホスト/テストブリッジの場合は `[FileName]Tests.cs`)
+  - 例: `src/FlightTrackerAI.Core/domain.clj` ⇔ `test/FlightTrackerAI.Core.Tests/domain_tests.clj`
+  - 例: `src/FlightTrackerAI.Infrastructure/task_repository.clj` ⇔ `test/FlightTrackerAI.Infrastructure.Tests/task_repository_tests.clj`
 - 型定義・ロジック・DTO・リポジトリ等の実装ファイルごとに対応するテストファイルを必ず用意し、テストの分散・不透明化を防止する。
-- 複数コンポーネントを跨ぐ結合・E2Eテストは `test/[Project].Tests/Integration/` 等に配置し、単体テストと明確に分離する。
+- 複数コンポーネントを跨ぐ結合・E2Eテストは `test/[Project].Tests/integration/` 等に配置し、単体テストと明確に分離する。
 
 ### テスト実行とレポート出力規約 (合否一覧 & カバレッジレポート)
 
@@ -65,11 +65,11 @@
 
 タスクの規模に応じて、必要な合意回数を調整する。
 
-| レベル | 対象 | 必要な合意 |
-| :--- | :--- | :--- |
-| **L1 (軽微)** | バグ修正、typo、軽微なリファクタ | 実装後の最終確認のみ（1回） |
-| **L2 (中規模)** | 新機能追加、UI変更 | 設計合意 + 最終確認（2回） |
-| **L3 (大規模)** | アーキテクチャ変更、破壊的変更 | 全ステップで合意（4回） |
+| レベル          | 対象                             | 必要な合意                  |
+| :-------------- | :------------------------------- | :-------------------------- |
+| **L1 (軽微)**   | バグ修正、typo、軽微なリファクタ | 実装後の最終確認のみ（1回） |
+| **L2 (中規模)** | 新機能追加、UI変更               | 設計合意 + 最終確認（2回）  |
+| **L3 (大規模)** | アーキテクチャ変更、破壊的変更   | 全ステップで合意（4回）     |
 
 ### タスク管理・ディレクトリ運用方針
 
@@ -78,7 +78,7 @@
 
 ### 自動フォーマット
 
-- **.NET / F# ソース・テストコード**: `dotnet format`
+- **.NET / C# ソース・テストコード**: `dotnet format`
 - **Markdown / Web資産 (HTML, JS, CSS)**: `npx prettier --write` またはプロジェクト標準フォーマッタ
 
 ### ブランチ運用
@@ -89,6 +89,7 @@
 ### コミット規約
 
 Conventional Commits に準拠する:
+
 - `feat:` 新機能
 - `fix:` バグ修正
 - `docs:` ドキュメント変更

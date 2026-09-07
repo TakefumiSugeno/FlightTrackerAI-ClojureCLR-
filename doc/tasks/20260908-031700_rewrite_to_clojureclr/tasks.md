@@ -14,7 +14,7 @@
 
 ## 2. 作業項目 (Work Items)
 
-- [ ] **WI-01: ドキュメントおよび規約の ClojureCLR (.NET 10) 最適化更新 (Step 2)**
+- [x] **WI-01: ドキュメントおよび規約の ClojureCLR (.NET 10) 最適化更新 (Step 2)**
   - `AGENTS.md` の言語・命名規則・フォーマッタ記述を ClojureCLR (.NET 10) 仕様に更新
   - `request.md`, `doc/spec.md`, `doc/design_detail.md` の技術スタック、アーキテクチャ図、ドメイン定義、モジュール構成を ClojureCLR 仕様へ更新
   - UIモック (`doc/mock/index.html`) と ClojureCLR 実装の 1:1 整合性維持確認
