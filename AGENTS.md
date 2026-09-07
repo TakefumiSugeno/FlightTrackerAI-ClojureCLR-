@@ -23,9 +23,9 @@
 - `doc/work/`
   - 開発に必要なテンポラリのディレクトリ（bugs.md 等のバグ管理）
 - `src/`
-  - ソースコードのルートディレクトリ (`src/[Project]/[Path]/[FileName].clj` / `src/[Project]/[Path]/[FileName].cs`)
+  - ソースコードのルートディレクトリ (`src/[Project]/[Path]/[file_name].clj` ※万一の代替言語: `.fs`)
 - `test/`
-  - テストコードのルートディレクトリ（ソースコードと 1:1 対応: `test/[Project].Tests/[Path]/[FileName]Tests.clj` / `test/[Project].Tests/[Path]/[FileName]Tests.cs`）
+  - テストコードのルートディレクトリ（ソースコードと 1:1 対応: `test/[Project].Tests/[Path]/[file_name]_tests.clj` ※万一の代替言語: `[FileName]Tests.fs`）
 
 ## 運用ルール
 
@@ -45,9 +45,9 @@
 ### ソースコードとテストコードの 1:1 対応規約
 
 - ソースコードとテストコードは **1：1 の対応関係** とし、ファイル名およびディレクトリ構造から対応関係を直接推測できるように命名・配置する。
-  - **命名規則**: `src/[Project]/[Path]/[file_name].clj` ⇔ `test/[Project].Tests/[Path]/[file_name]_tests.clj` (C#ホスト/テストブリッジの場合は `[FileName]Tests.cs`)
-  - 例: `src/FlightTrackerAI.Core/domain.clj` ⇔ `test/FlightTrackerAI.Core.Tests/domain_tests.clj`
-  - 例: `src/FlightTrackerAI.Infrastructure/task_repository.clj` ⇔ `test/FlightTrackerAI.Infrastructure.Tests/task_repository_tests.clj`
+  - **命名規則**: `src/[Project]/[Path]/[file_name].clj` ⇔ `test/[Project].Tests/[Path]/[file_name]_tests.clj`
+  - 例: `src/FlightTrackerAI.Core/flight_tracker_ai/core/domain.clj` ⇔ `test/FlightTrackerAI.Core.Tests/domain_tests.clj`
+  - 例: `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/task_repository.clj` ⇔ `test/FlightTrackerAI.Infrastructure.Tests/task_repository_tests.clj`
 - 型定義・ロジック・DTO・リポジトリ等の実装ファイルごとに対応するテストファイルを必ず用意し、テストの分散・不透明化を防止する。
 - 複数コンポーネントを跨ぐ結合・E2Eテストは `test/[Project].Tests/integration/` 等に配置し、単体テストと明確に分離する。
 
@@ -58,7 +58,7 @@
      - 全テストケース名、OK(✔)/NG(❌)、所要時間、失敗時の期待値・実際値差分およびスタックトレースを明示。
   2. **コードカバレッジレポート (網羅率%)**: `doc/work/CoverageReport/index.html`
      - 全体およびファイルごとの行・ブランチ網羅率、実行行(緑)/未実行行(赤)のソースコード可視化。
-- **標準実行コマンド**: `./scripts/test.ps1` または `dotnet test --results-directory doc/work/TestResults --logger "html;logfilename=TestResults.html" --collect:"XPlat Code Coverage"`
+- **標準実行コマンド**: `./scripts/test.ps1`
 - **目標カバレッジ**: デフォルト 80% 以上を維持し、未達の場合はテストケース（境界値・異常系）を追加すること。
 
 ### 合意レベル
@@ -78,7 +78,7 @@
 
 ### 自動フォーマット
 
-- **.NET / C# ソース・テストコード**: `dotnet format`
+- **.NET / F# ソース・テストコード (万一の代替時)**: `dotnet format`
 - **Markdown / Web資産 (HTML, JS, CSS)**: `npx prettier --write` またはプロジェクト標準フォーマッタ
 
 ### ブランチ運用

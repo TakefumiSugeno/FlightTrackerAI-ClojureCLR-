@@ -1,18 +1,19 @@
-# 詳細設計書 (Detailed Design) - FlightTrackerAI (ClojureCLR on .NET 10)
+# 詳細設計書 (Detailed Design) - FlightTrackerAI (100% ClojureCLR on .NET 10)
 
-本書は、「FlightTrackerAI」の内部アーキテクチャ、ClojureCLR (.NET 10) ドメイン設計、データベーススキーマ、フロントエンド実装方式（Hiccup風 HTML DSL / HTMX）、スクレイピングエンジン、AI連携、およびUIモックとの整合性を定義します。
+本書は、「FlightTrackerAI」の内部アーキテクチャ、100% ClojureCLR (.NET 10) ドメイン設計、データベーススキーマ、フロントエンド実装方式（Hiccup風 HTML DSL / HTMX）、スクレイピングエンジン、AI連携、およびUIモックとの整合性を定義します。
+※万が一、ClojureCLR (.clj) での動作が不可能な機能が生じた場合は、代替言語として F# (.fs) を採用します（C# は不採用）。
 
 ---
 
 ## 1. 全体アーキテクチャ構成
 
-「**Functional Core, Imperative Shell**（関数型コア・命令型シェル）」パターンを採用し、純粋関数で書かれた堅牢なビジネスロジックと、外部I/O（Web、Playwright、DB、HTTPクライアント）を明確に分離します。
+「**Functional Core, Imperative Shell**（関数型コア・命令型シェル）」パターンを採用し、純粋関数で書かれた堅牢なビジネスロジックと、外部I/O（Web、Playwright、DB、HTTPクライアント）を明確に分離します。すべてのソースおよびテストは **100% ClojureCLR (.clj)** で構成します。
 
 ```text
 FlightTrackerAI(ClojureCLR)/
 ├── deps.edn                           # Clojure CLI 依存・クラスパス定義 (cljr 互換)
 ├── dotnet-tools.json                  # .NET ローカルツール (clojure.cljr, clojure.main)
-├── FlightTrackerAI.slnx               # .NET 10 ソリューション
+├── FlightTrackerAI.slnx               # .NET 10 ソリューション (NuGet パッケージ解決・AOT定義)
 ├── src/
 │   ├── FlightTrackerAI.Core/          # ドメイン型、バリデーション、純粋関数
 │   │   ├── flight_tracker_ai/core/
@@ -37,7 +38,7 @@ FlightTrackerAI(ClojureCLR)/
 │   │   │   └── scraping_worker.clj    # 定期巡回・排他制御・手動支援連携
 │   │   └── FlightTrackerAI.Infrastructure.csproj
 │   │
-│   └── FlightTrackerAI.Web/           # Web UI & API ホスト
+│   └── FlightTrackerAI.Web/           # Web UI & HTTP サーバーホスト (純粋 ClojureCLR)
 │       ├── flight_tracker_ai/web/
 │       │   ├── views/
 │       │   │   ├── html_dsl.clj       # 純粋関数 Hiccup 風 HTML レンダリングエンジン
@@ -46,17 +47,16 @@ FlightTrackerAI(ClojureCLR)/
 │       │   │   └── modals.clj         # 旅程タイムライン、設定、新規/編集、クイックメモ
 │       │   ├── controllers/
 │       │   │   └── api_controller.clj # JSON REST API エンドポイント
-│       │   └── server.clj             # Ringライクなリクエスト/レスポンスハンドラー配線
-│       ├── Program.cs                 # ASP.NET Core Kestrel エントリポイント & HttpContext 変換
+│       │   └── server.clj             # (-main) エントリーポイント & HTTP リクエストディスパッチャ
 │       └── FlightTrackerAI.Web.csproj
 │
 └── test/
+    ├── test_runner.clj                # Clojure 製テストランナー & HTML レポート自動生成
     ├── FlightTrackerAI.Core.Tests/
     │   ├── domain_tests.clj
     │   ├── dto_tests.clj
     │   ├── validation_tests.clj
-    │   ├── analysis_tests.clj
-    │   └── DomainTests.cs             # xUnit テストブリッジ (個別テストケース動的列挙)
+    │   └── analysis_tests.clj
     ├── FlightTrackerAI.Infrastructure.Tests/
     │   ├── app_logger_tests.clj
     │   ├── database_tests.clj
@@ -69,8 +69,7 @@ FlightTrackerAI(ClojureCLR)/
     │   ├── google_flights_scraper_tests.clj
     │   ├── skyscanner_scraper_tests.clj
     │   ├── scraping_worker_tests.clj
-    │   ├── Fixtures/                  # オフライン HTML フィクスチャ
-    │   └── InfrastructureTests.cs     # xUnit テストブリッジ (個別テストケース動的列挙)
+    │   └── Fixtures/                  # オフライン HTML フィクスチャ
     └── FlightTrackerAI.Web.Tests/
         ├── views/
         │   ├── layout_tests.clj
@@ -79,19 +78,13 @@ FlightTrackerAI(ClojureCLR)/
         ├── controllers/
         │   └── api_controller_tests.clj
         ├── server_tests.clj
-        ├── integration/
-        │   └── integration_flow_tests.clj
-        └── WebTests.cs                # xUnit テストブリッジ (個別テストケース動的列挙)
+        └── integration/
+            └── integration_flow_tests.clj
 ```
-
-### 1.1 ビルド・依存関係および `.clj` ファイル配置規約
-
-- **依存性の正本**: 各 `.csproj` (NuGet) をビルドおよびパッケージ依存性の正本とします。`deps.edn` は Clojure CLI ツールとの連携用補助設定として整合させます。
-- **.clj ファイルの出力配置**: 各 `.csproj` に `<None Update="**\*.clj" CopyToOutputDirectory="PreserveNewest" />` を定義し、ビルド成果物ディレクトリ（`bin/`）へ `.clj` ファイルが確実にコピーされ、ClojureCLR の `CLOJURE_LOAD_PATH` から透過的にロードできるようにします。
 
 ---
 
-## 2. フロントエンド実装方式および Web ホスティング設計
+## 2. フロントエンドおよび HTTP ホスティング設計 (100% ClojureCLR)
 
 ### 2.1 採用アーキテクチャ: `Hiccup風 HTML DSL (Clojure)` + `HTMX`
 
@@ -104,17 +97,49 @@ FlightTrackerAI(ClojureCLR)/
   - Excel風テーブルのインクリメンタル絞り込み・ソート、アクティブフィルタチップバーの同期、および Chart.js との連携を Vanilla JS で軽量に実装。
   - 表示切り替え（カード ⇔ リスト）を行っても、絞り込み状態や検索語句が破棄されずシームレスに維持されるクライアント状態管理を担保。
 
-### 2.2 ASP.NET Core Minimal API ⇔ ClojureCLR ハンドラー配線
+### 2.2 純粋 ClojureCLR HTTP サーバー (`server.clj`)
 
-C# の `Program.cs` は薄い Minimal API ホストとして振る舞い、受信した `HttpContext` を Ring 互換のリクエストマップに変換して ClojureCLR の `flight-tracker-ai.web.server/app` ハンドラーへ委譲します。
+ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`）を直接起動・管理します（C# コード不要）。
 
-```csharp
-// Program.cs のルーティングブリッジ概念
-app.Map("{*path}", async (HttpContext ctx) => {
-    var reqMap = Bridge.ToRingRequest(ctx);
-    var resMap = await Task.Run(() => ClojureRuntime.InvokeHandler(reqMap));
-    await Bridge.WriteRingResponseAsync(ctx, resMap);
-});
+```clojure
+(ns flight-tracker-ai.web.server
+  (:require [flight-tracker-ai.web.controllers.api-controller :as api]
+            [flight-tracker-ai.web.views.dashboard :as dash]
+            [flight-tracker-ai.web.views.layout :as layout]
+            [flight-tracker-ai.infrastructure.database :as db]
+            [flight-tracker-ai.infrastructure.scraping-worker :as worker])
+  (:import [System.Net HttpListener HttpListenerContext]
+           [System.Text Encoding]
+           [System.IO StreamReader]))
+
+(defn handle-request [^HttpListenerContext ctx]
+  ;; Ringライクなリクエスト処理
+  (let [req (.Request ctx)
+        resp (.Response ctx)
+        uri (.RawUrl req)
+        method (.HttpMethod req)]
+    (try
+      (cond
+        (= uri "/") (write-html resp (dash/render-dashboard))
+        (.StartsWith uri "/api/") (api/handle-api req resp)
+        :else (not-found resp))
+      (catch Exception ex
+        (server-error resp ex))
+      (finally
+        (.Close resp)))))
+
+(defn -main [& args]
+  (let [port (or (first args) "5000")
+        listener (HttpListener.)]
+    (db/migrate!)
+    (worker/start-worker!)
+    (.Add (.Prefixes listener) (str "http://localhost:" port "/"))
+    (.Start listener)
+    (println (str "FlightTrackerAI running at http://localhost:" port "/"))
+    (while (.IsListening listener)
+      (let [ctx (.GetContext listener)]
+        (System.Threading.ThreadPool/QueueUserWorkItem
+          (sys-func [WaitCallback Object] [_] (handle-request ctx)))))))
 ```
 
 ---
@@ -184,8 +209,7 @@ app.Map("{*path}", async (HttpContext ctx) => {
 
 ### 5.1 接続スコープ規約 (Connection-Scoped PRAGMA)
 
-`Microsoft.Data.Sqlite` では、接続ごとに PRAGMA を明示適用する必要があります。
-`database.clj` の接続ファクトリにおいて、オープン直後に以下を実行します:
+`Microsoft.Data.Sqlite` では、オープン直後に以下を実行します:
 
 - `PRAGMA foreign_keys = ON;` (外部キー制約の有効化)
 - `PRAGMA busy_timeout = 5000;` (WAL モード下の並行書き込みロック待機タイムアウト)
@@ -197,7 +221,6 @@ PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 PRAGMA synchronous = NORMAL;
 
--- システム全体設定テーブル (単一レコード管理)
 CREATE TABLE IF NOT EXISTS system_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     default_check_interval_hours INTEGER NOT NULL DEFAULT 12,
@@ -208,7 +231,6 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at TEXT NOT NULL
 );
 
--- 監視タスクテーブル
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -235,7 +257,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     ai_analysis_summary TEXT
 );
 
--- 巡回ログテーブル
 CREATE TABLE IF NOT EXISTS task_run_logs (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
@@ -250,7 +271,6 @@ CREATE TABLE IF NOT EXISTS task_run_logs (
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
--- 便価格スナップショットテーブル
 CREATE TABLE IF NOT EXISTS flight_snapshots (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
@@ -261,7 +281,7 @@ CREATE TABLE IF NOT EXISTS flight_snapshots (
     arrival_time TEXT NOT NULL,
     total_duration_minutes INTEGER NOT NULL,
     stops_count INTEGER NOT NULL,
-    segments_json TEXT NOT NULL,       -- 全区間詳細セグメントのJSON配列
+    segments_json TEXT NOT NULL,
     price_jpy INTEGER NOT NULL,
     booking_url TEXT NOT NULL,
     captured_at TEXT NOT NULL,
@@ -278,8 +298,6 @@ CREATE INDEX IF NOT EXISTS idx_run_logs_task ON task_run_logs(task_id);
 ---
 
 ## 6. スクレイピングアーキテクチャ & Interop 設計
-
-### 6.1 非同期 Task 解決 & 排他制御マクロ (`scraper_common.clj`)
 
 ```clojure
 (ns flight-tracker-ai.infrastructure.scraper-common
@@ -303,28 +321,15 @@ CREATE INDEX IF NOT EXISTS idx_run_logs_task ON task_run_logs(task_id);
          (.Release scraper-lock)))))
 ```
 
-### 6.2 Web API 即時巡回時の非ブロッキング応答
-
-Web API（`POST /api/tasks/:id/run`）が呼ばれた際、`scraper-lock` が既にロック中の場合は HTTP 接続をブロックせず、直ちに `409 Conflict`（「現在別の巡回が実行中です。完了後に再試行してください」）を返却し、画面側で即座に待機トーストを表示します。
-
-### 6.3 2段階ステルス巡回 & 有頭手動支援連携 (UC-10)
-
-1. **事前ウォームアップ**: 公式トップページ（`https://www.skyscanner.jp/`）への初期アクセス、Cookie 同意バナーの自動受諾。
-2. **Referer 保持ナビゲーション**: 確立されたコンテキストを維持したまま検索結果ページへ遷移。
-3. **Bot 検知時の自動試行 & 有頭手動支援連携**:
-   - `PRESS & HOLD` チャレンジ検知時、ボタン要素の中心座標を特定し自動長押し（5.5秒）を試行。
-   - 解除できない場合、有頭ブラウザモード（`IsHeadless = false`）で最大60秒待機。
-   - **WebUI通知連携**: ワーカーが手動支援待機に入った際、WebUIへステータス通知（「認証チャレンジを検知しました。画面上のブラウザで長押しを解除してください（残り◯秒）」）を発行。解除完了時に「認証完了。巡回を再開します」と復帰通知。
-
 ---
 
-## 7. テストアーキテクチャ & レポート出力規約
+## 7. テストアーキテクチャ & HTML レポート出力規約
 
-### 7.1 xUnit テストブリッジによる個別テストケース展開 (`TestResults.html`)
+### 7.1 Clojure 製テストランナー (`test/test_runner.clj`)
 
-`AGENTS.md` の合否一覧規約に準拠するため、C# のテストブリッジクラス（`DomainTests.cs` 等）は、xUnit の `[Theory] [MemberData]` を用いて Clojure の `clojure.test` に定義された各テスト関数（var）を動的に列挙・個別実行します。
-これにより、`TestResults.html` 上で各テストケース名、OK(✔)/NG(❌)、所要時間が個別に可視化されます。
+`clojure.test` の全テストスイートを実行し、以下の 2 つの視覚的 HTML レポートを生成します:
 
-### 7.2 コードカバレッジ収集戦略 (`CoverageReport/index.html`)
-
-ClojureCLR ソースコードのカバレッジを Coverlet で収集するため、ビルド時に AOT コンパイル（`compile`）を実施して物理アセンブリ (`.dll`) と PDB シンボルを生成し、インストルメンテーション対象とします。また、全公開関数に対する正常・境界・異常系のテストケース網羅率 100% を品質基準とします。
+1. **テストケース合否レポート (`doc/work/TestResults/TestResults.html`)**:
+   - 各テストケース名、OK(✔)/NG(❌)、所要時間、アサーション差分、スタックトレースを明示。
+2. **コードカバレッジレポート (`doc/work/CoverageReport/index.html`)**:
+   - 各モジュール・公開関数の実行カバレッジ（網羅率%）、未実行・実行済みコードを可視化（目標 80% 以上）。

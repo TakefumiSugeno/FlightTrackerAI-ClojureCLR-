@@ -22,10 +22,10 @@
 
 - [ ] **WI-02: ClojureCLR (.NET 10) プロジェクト構造・ビルド・テスト・レポート実行基盤の構築 (Step 3)**
   - `deps.edn` の定義および .NET ローカルツール `cljr` (`Clojure.Cljr`), `Clojure.Main` の配線
-  - .NET 10 ソリューション構成 (`FlightTrackerAI.slnx` / `.sln`)
-  - `Clojure` (1.12.2) NuGet パッケージおよび依存ライブラリ (`Microsoft.Data.Sqlite`, `Microsoft.Playwright`, `System.Net.Http.Json`) の導入
+  - .NET 10 ソリューションおよびプロジェクト構成（C# ソースコード `.cs` は一切含まず、万一の代替時のみ F#）
+  - `Clojure` (1.12.2) NuGet パッケージおよび依存ライブラリ (`Microsoft.Data.Sqlite`, `Microsoft.Playwright`) の導入
   - ソースコード (`src/`) とテストコード (`test/`) の 1:1 対応ディレクトリ構造確立
-  - .NET 10 xUnit テストランナーから ClojureCLR テストスイートを呼び出すテストブリッジの構築
+  - Clojure 製テストランナー (`test/test_runner.clj`) の構築
   - `scripts/test.ps1` の整備（`doc/work/TestResults/TestResults.html` および `doc/work/CoverageReport/index.html` を出力）
 
 - [ ] **WI-03: `FlightTrackerAI.Core` の ClojureCLR 実装 & テスト (TDD, 1:1)**
@@ -80,8 +80,7 @@
     - 即時巡回実行 API（排他ロック時の適切な待機メッセージ・トースト連携）
     - エラータスクの「今すぐ再試行」API
   - `server.clj` ⇔ `server_tests.clj`:
-    - ASP.NET Core Kestrel HTTP サーバーホスト（薄い C# ホストまたは Clojure ハンドラー配線）
-    - ルーティング、静的ファイル配信
+    - 100% ClojureCLR による HTTP サーバーホスト（System.Net.HttpListener）、ルーティング、静的ファイル配信
 
 - [ ] **WI-06: 結合・E2Eテスト検証 & レポート確認**
   - `test/FlightTrackerAI.Web.Tests/integration/integration_flow_tests.clj`:
@@ -95,7 +94,9 @@
 
 ## 3. 受入基準 (Acceptance Criteria)
 
-1. **言語・プラットフォーム**: 全てのソースコードが ClojureCLR (.NET 10) で実装され、.NET 10 ランタイム上で正しくビルド・実行可能であること。
+1. **言語・プラットフォーム**:
+   - ソースコードおよびテストコードに C# (`.cs`) を一切含まず、全て ClojureCLR (.NET 10, `.clj`) で実装されていること（万が一 ClojureCLR で動作不可能な機能が生じた場合のみ F# を代替採用）。
+   - .NET 10 ランタイム上で正常に実行可能であること。
 2. **1:1 テスト対応**: `src/` 配下の全モジュールに対応するテストが `test/` 配下に 1:1 で配置されていること。
 3. **テストレポート品質**:
    - `doc/work/TestResults/TestResults.html` で全テストが合格（OK）すること。

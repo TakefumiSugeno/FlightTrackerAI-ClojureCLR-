@@ -15,7 +15,7 @@
 ```mermaid
 flowchart TD
     User["ユーザー"] <--> WebUI["Webダッシュボード (カード / 一覧 / タイムライン)"]
-    WebUI <--> Server["ClojureCLR Web API / Backend サーバー (ASP.NET Core on .NET 10)"]
+    WebUI <--> Server["ClojureCLR Web API / Backend サーバー (ClojureCLR on .NET 10)"]
 
     Server <--> DB[("SQLite DB (WAL Mode)")]
     Server <--> LLM["OpenRouter API (Claude / GPT / DeepSeek)"]
