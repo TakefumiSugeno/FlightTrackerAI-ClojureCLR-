@@ -20,7 +20,7 @@
   - UIモック (`doc/mock/index.html`) と ClojureCLR 実装の 1:1 整合性維持確認
   - 「ユーザー」「SE/PG」ロールによるドキュメントレビュー実施・合意
 
-- [ ] **WI-02: ClojureCLR (.NET 10) プロジェクト構造・ビルド・テスト・レポート実行基盤の構築 (Step 3)**
+- [x] **WI-02: ClojureCLR (.NET 10) プロジェクト構造・ビルド・テスト・レポート実行基盤の構築 (Step 3)**
   - `deps.edn` の定義および .NET ローカルツール `cljr` (`Clojure.Cljr`), `Clojure.Main` の配線
   - .NET 10 ソリューションおよびプロジェクト構成（C# ソースコード `.cs` は一切含まず、万一の代替時のみ F#）
   - `Clojure` (1.12.2) NuGet パッケージおよび依存ライブラリ (`Microsoft.Data.Sqlite`, `Microsoft.Playwright`) の導入
@@ -28,7 +28,7 @@
   - Clojure 製テストランナー (`test/test_runner.clj`) の構築
   - `scripts/test.ps1` の整備（`doc/work/TestResults/TestResults.html` および `doc/work/CoverageReport/index.html` を出力）
 
-- [ ] **WI-03: `FlightTrackerAI.Core` の ClojureCLR 実装 & テスト (TDD, 1:1)**
+- [x] **WI-03: `FlightTrackerAI.Core` の ClojureCLR 実装 & テスト (TDD, 1:1)**
   - `domain.clj` ⇔ `domain_tests.clj`:
     - IATAコード検証 (`create-iata-code`, `iata-code-value`)
     - 旅行タイプ (`one-way`, `round-trip`)
@@ -44,7 +44,7 @@
   - `dto.clj` ⇔ `dto_tests.clj`:
     - SQLite用レコード / JSONシリアライズ変換
 
-- [ ] **WI-04: `FlightTrackerAI.Infrastructure` の ClojureCLR 実装 & テスト (TDD, 1:1)**
+- [x] **WI-04: `FlightTrackerAI.Infrastructure` の ClojureCLR 実装 & テスト (TDD, 1:1)**
   - `app_logger.clj` ⇔ `app_logger_tests.clj`: ログ出力
   - `scraper_common.clj` ⇔ `scraper_common_tests.clj`:
     - 安全な非同期 Task 解決ユーティリティ (`await-task`, `await-task-result`)
@@ -63,7 +63,7 @@
     - Bot検知（PRESS & HOLD）時の有頭手動支援（最大60秒待機）とWebUI誘導状態通知連携
     - 自動完了・パージ処理
 
-- [ ] **WI-05: `FlightTrackerAI.Web` の ClojureCLR 実装 & テスト (TDD, 1:1)**
+- [x] **WI-05: `FlightTrackerAI.Web` の ClojureCLR 実装 & テスト (TDD, 1:1)**
   - `views/layout.clj` ⇔ `views/layout_tests.clj`: 基本レイアウト（Tailwind CSS, Chart.js, HTMX, トースト通知領域）
   - `views/dashboard.clj` ⇔ `views/dashboard_tests.clj`:
     - カード表示、Excel風リスト表示、フィルターバー、アクティブフィルタチップバー
@@ -82,13 +82,13 @@
   - `server.clj` ⇔ `server_tests.clj`:
     - 100% ClojureCLR による HTTP サーバーホスト（System.Net.HttpListener）、ルーティング、静的ファイル配信
 
-- [ ] **WI-06: 結合・E2Eテスト検証 & レポート確認**
+- [x] **WI-06: 結合・E2Eテスト検証 & レポート確認**
   - `test/FlightTrackerAI.Web.Tests/integration/integration_flow_tests.clj`:
     - AI入力 ➔ タスク登録 ➔ スクレイピング結果保存 ➔ 分析 ➔ Webhook通知 ➔ UI取得の一連フロー検証
   - テストケース合否レポート (`doc/work/TestResults/TestResults.html`) の全件合格確認
   - コードカバレッジレポート (`doc/work/CoverageReport/index.html`) の 80% 以上達成確認
 
-- [ ] **WI-07: ドキュメント事後同期 & ユーザー最終確認 (Step 4)**
+- [x] **WI-07: ドキュメント事後同期 & ユーザー最終確認 (Step 4)**
   - 実装差分のドキュメント反映
   - 全成果物コミット、ユーザー最終合意取得
 
