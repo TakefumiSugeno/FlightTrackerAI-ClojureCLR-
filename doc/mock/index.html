@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlightTrackerAI - 航空券価格監視ダッシュボード</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            skyline: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#075985',
+              800: '#0c4a6e',
+              900: '#082f49',
+              950: '#041d30'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Toast Container (Top-Right) -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-950/90 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Left: Logo & Environment -->
+      <div class="flex items-center space-x-3">
+        <div class="bg-sky-600 p-2 rounded-lg text-white shadow-md">
+          <i data-lucide="plane" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="text-lg font-bold tracking-tight text-white">FlightTracker<span class="text-sky-400">AI</span></span>
+          </div>
+          <p class="text-[10px] text-slate-400 hidden sm:block">Google Flights &amp; Skyscanner 自動巡回・価格監視</p>
+        </div>
+      </div>
+
+      <!-- Right: Worker Status & Actions -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <div class="hidden md:flex items-center space-x-2 text-xs bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span class="text-slate-300">巡回ワーカー: <span class="text-emerald-400 font-medium">稼働中 (次巡回: 18:00)</span></span>
+        </div>
+
+        <button onclick="openSettingsModal()" title="システム全体設定 (デフォルト巡回間隔 / Webhook / APIキー)" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition border border-slate-700 flex items-center space-x-1.5 text-xs font-medium">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">全体設定</span>
+        </button>
+
+        <button onclick="openNewTaskModal()" class="flex items-center space-x-1.5 bg-sky-600 hover:bg-sky-500 active:scale-95 transition text-white px-3.5 py-2 rounded-lg font-medium text-xs shadow-sm">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">新規タスク登録</span>
+          <span class="sm:hidden">新規登録</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- Assistant Structured Prompt & Natural Language Textarea Box -->
+    <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="flex items-center space-x-2 text-xs font-semibold text-sky-400">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>AI 構造化文書・自然言語解析アシスタント</span>
+        </div>
+        <div class="flex items-center space-x-2 text-[11px]">
+          <span class="text-slate-500 hidden sm:inline">テンプレート入力:</span>
+          <button type="button" onclick="insertTemplate('markdown')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:text-white transition">箇条書き</button>
+          <button type="button" onclick="insertTemplate('yaml')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:text-white transition">YAML形式</button>
+          <button type="button" onclick="insertTemplate('natural')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:text-white transition">自然文</button>
+        </div>
+      </div>
+
+      <div class="relative">
+        <textarea id="aiInput" rows="4" placeholder="【自由な構造化テキストで条件を記述できます】
+例:
+- 出発地: 東京 (成田 / NRT)
+- 目的地: ロサンゼルス (LAX)
+- 往路日: 2026/08/10, 復路日: 2026/08/18
+- 乗継: 直行便のみ
+- 目標予算: 180,000 円以下
+- 希望航空会社: ANA, JAL" 
+          class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:ring-1 focus:ring-sky-500 leading-relaxed resize-y min-h-[96px]"></textarea>
+      </div>
+
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+        <span class="text-[11px] text-slate-400">※ 箇条書きやMarkdown、長文からOpenRouter AIが自動で各パラメータを抽出して登録フォームへ展開します。</span>
+        <button onclick="parseWithAI()" class="bg-sky-600 hover:bg-sky-500 active:scale-95 transition text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 whitespace-nowrap shadow-sm">
+          <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+          <span>AIで解析して新規登録フォームに反映</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Controls Bar: Synchronized Status Tabs & View Toggle -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+      <!-- Status Tabs (Fully Synchronized with Table Status Filter) -->
+      <div class="flex flex-wrap gap-1">
+        <button onclick="setStatusFilter('all')" id="tabAll" class="px-3 py-1.5 rounded-md text-xs font-medium bg-sky-600 text-white">すべて (4)</button>
+        <button onclick="setStatusFilter('active')" id="tabActive" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">監視中 (2)</button>
+        <button onclick="setStatusFilter('paused')" id="tabPaused" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">一時停止 (1)</button>
+        <button onclick="setStatusFilter('error')" id="tabError" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800">エラー (1)</button>
+        <button onclick="setStatusFilter('empty')" id="tabEmpty" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-500 hover:text-slate-300 hover:bg-slate-800">未登録 (0件画面)</button>
+      </div>
+
+      <!-- View Toggle & Quick Search -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <div class="relative flex-1 sm:flex-none">
+          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+          <input type="text" id="quickSearchInput" oninput="applyAllFilters()" placeholder="都市・空港・航空会社で検索..." class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 w-full sm:w-56 focus:outline-none focus:ring-1 focus:ring-sky-500">
+        </div>
+
+        <div class="flex bg-slate-900 border border-slate-700 rounded-lg p-0.5">
+          <button id="btnViewCards" onclick="switchView('cards')" class="px-2.5 py-1 rounded text-xs font-medium bg-slate-800 text-white flex items-center space-x-1">
+            <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">カード</span>
+          </button>
+          <button id="btnViewList" onclick="switchView('list')" class="px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white flex items-center space-x-1">
+            <i data-lucide="table" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">一覧リスト (Excel風)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 1: Card View Grid -->
+    <div id="cardsView" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+      <!-- Card 1: HND -> CDG (Active) -->
+      <div data-status="active" data-route="HND-CDG" data-airlines="AF,ANA,SQ" data-search="HND CDG 東京 羽田 パリ エールフランス ANA SQ 目標達成" class="taskCard bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-sm hover:border-slate-700 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-xs font-medium bg-emerald-950 text-emerald-300 border border-emerald-800/60 flex items-center space-x-1">
+                <i data-lucide="check-circle" class="w-3 h-3"></i>
+                <span>目標達成</span>
+              </span>
+              <span class="text-xs text-slate-400">往復 (12h毎巡回)</span>
+            </div>
+            <div class="flex items-center space-x-1 text-slate-400">
+              <button onclick="triggerImmediateRun('HND-CDG')" title="今すぐ巡回実行" class="p-1.5 hover:text-sky-400 hover:bg-slate-800 rounded transition"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openEditModal('HND-CDG')" title="タスク設定変更" class="p-1.5 hover:text-white hover:bg-slate-800 rounded transition"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openDeleteModal('HND-CDG', '東京(羽田) → パリ(CDG)')" title="削除" class="p-1.5 hover:text-rose-400 hover:bg-slate-800 rounded transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-start justify-between">
+            <div>
+              <div class="text-xl font-bold text-white flex items-center space-x-2">
+                <span>HND</span>
+                <i data-lucide="arrow-right" class="w-4 h-4 text-sky-400"></i>
+                <span>CDG</span>
+              </div>
+              <div class="text-xs text-slate-400 mt-0.5">東京(羽田) → パリ(シャルル・ド・ゴール)</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-semibold text-white">
+                <span class="text-sky-400">往:</span> 05/01(金) 10:35 → 07:15<span class="text-slate-400 text-[10px]">(+1)</span>
+              </div>
+              <div class="text-xs font-semibold text-white mt-0.5">
+                <span class="text-indigo-400">復:</span> 05/08(金) 20:00 → 16:55<span class="text-slate-400 text-[10px]">(+1)</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1">乗継1回 (SIN) / 所要 22h40m</div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2">
+            <div>
+              <div class="text-xs text-slate-400">最安航空会社</div>
+              <div class="text-sm font-semibold text-white mt-0.5 flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span class="truncate">ANA + シンガポール航空 / 復: AF</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1 flex items-center space-x-1">
+                <i data-lucide="clock" class="w-3 h-3"></i>
+                <span>取得: 2026/08/29 14:00 (15分前)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-400">現在最安値 (<span class="text-emerald-400 font-medium">Google Flights</span>)</div>
+              <div class="text-xl font-bold text-emerald-400">¥148,200</div>
+              <div class="text-xs text-slate-400">目標: ¥160,000 以下</div>
+            </div>
+          </div>
+
+          <!-- User Note Box -->
+          <div class="mt-3 p-2 bg-slate-900/90 border border-slate-800 rounded-lg text-[11px] text-slate-300 flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 truncate">
+              <i data-lucide="file-text" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+              <span class="truncate font-mono">メモ: GW休暇用。羽田発着希望、荷物預けあり</span>
+            </div>
+            <button onclick="openQuickNoteModal('HND-CDG', 'GW休暇用。羽田発着希望、荷物預けあり')" title="メモを編集" class="text-slate-400 hover:text-white ml-2 shrink-0 p-1 hover:bg-slate-800 rounded transition"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 font-medium">Google</span>
+            <span class="px-2 py-0.5 rounded bg-sky-950 border border-sky-800 text-sky-300 font-medium">Skyscanner</span>
+          </div>
+          <button onclick="openDetailModal('HND-CDG')" class="text-xs font-semibold text-sky-400 hover:text-sky-300 flex items-center space-x-1">
+            <span>所要時間・乗継詳細 &amp; 便比較</span>
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 2: NRT -> LAX (Active) -->
+      <div data-status="active" data-route="NRT-LAX" data-airlines="JAL,ANA" data-search="NRT LAX 東京 成田 ロサンゼルス JAL ANA 監視中" class="taskCard bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-sm hover:border-slate-700 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-xs font-medium bg-sky-950 text-sky-300 border border-sky-800/60 flex items-center space-x-1">
+                <i data-lucide="activity" class="w-3 h-3"></i>
+                <span>監視中</span>
+              </span>
+              <span class="text-xs text-slate-400">往復 (12h毎巡回)</span>
+            </div>
+            <div class="flex items-center space-x-1 text-slate-400">
+              <button onclick="triggerImmediateRun('NRT-LAX')" title="今すぐ巡回実行" class="p-1.5 hover:text-sky-400 hover:bg-slate-800 rounded transition"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openEditModal('NRT-LAX')" title="タスク設定変更" class="p-1.5 hover:text-white hover:bg-slate-800 rounded transition"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openDeleteModal('NRT-LAX', '東京(成田) → ロサンゼルス(LAX)')" title="削除" class="p-1.5 hover:text-rose-400 hover:bg-slate-800 rounded transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-start justify-between">
+            <div>
+              <div class="text-xl font-bold text-white flex items-center space-x-2">
+                <span>NRT</span>
+                <i data-lucide="arrow-right" class="w-4 h-4 text-sky-400"></i>
+                <span>LAX</span>
+              </div>
+              <div class="text-xs text-slate-400 mt-0.5">東京(成田) → ロサンゼルス</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-semibold text-white">
+                <span class="text-sky-400">往:</span> 08/10(月) 17:05 → 11:15
+              </div>
+              <div class="text-xs font-semibold text-white mt-0.5">
+                <span class="text-indigo-400">復:</span> 08/18(火) 13:20 → 16:45<span class="text-slate-400 text-[10px]">(+1)</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1">直行便 / 所要 10h10m</div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2">
+            <div>
+              <div class="text-xs text-slate-400">最安航空会社</div>
+              <div class="text-sm font-semibold text-white mt-0.5 flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                <span>往: JAL / 復: ANA</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1 flex items-center space-x-1">
+                <i data-lucide="clock" class="w-3 h-3"></i>
+                <span>取得: 2026/08/29 11:30 (2時間前)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-400">現在最安値 (<span class="text-sky-400 font-medium">Skyscanner</span>)</div>
+              <div class="text-xl font-bold text-white">¥185,000</div>
+              <div class="text-xs text-slate-400">目標: ¥150,000 以下</div>
+            </div>
+          </div>
+
+          <!-- User Note Box -->
+          <div class="mt-3 p-2 bg-slate-900/90 border border-slate-800 rounded-lg text-[11px] text-slate-300 flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 truncate">
+              <i data-lucide="file-text" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+              <span class="truncate font-mono">メモ: 出張用。直行便必須、予算上限20万</span>
+            </div>
+            <button onclick="openQuickNoteModal('NRT-LAX', '出張用。直行便必須、予算上限20万')" title="メモを編集" class="text-slate-400 hover:text-white ml-2 shrink-0 p-1 hover:bg-slate-800 rounded transition"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 font-medium">Google</span>
+            <span class="px-2 py-0.5 rounded bg-sky-950 border border-sky-800 text-sky-300 font-medium">Skyscanner</span>
+          </div>
+          <button onclick="openDetailModal('NRT-LAX')" class="text-xs font-semibold text-sky-400 hover:text-sky-300 flex items-center space-x-1">
+            <span>所要時間・乗継詳細 &amp; 便比較</span>
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 3: FUK -> TPE (Paused) -->
+      <div data-status="paused" data-route="FUK-TPE" data-airlines="BR" data-search="FUK TPE 福岡 台北 エバー航空 一時停止" class="taskCard bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-sm hover:border-slate-700 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 flex items-center space-x-1">
+                <i data-lucide="pause-circle" class="w-3 h-3"></i>
+                <span>一時停止中</span>
+              </span>
+              <span class="text-xs text-slate-400">往復 (巡回停止)</span>
+            </div>
+            <div class="flex items-center space-x-1 text-slate-400">
+              <button onclick="showToast('タスクを再開しました', 'success')" title="監視再開" class="p-1.5 hover:text-emerald-400 hover:bg-slate-800 rounded transition"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openEditModal('FUK-TPE')" title="タスク設定変更" class="p-1.5 hover:text-white hover:bg-slate-800 rounded transition"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openDeleteModal('FUK-TPE', '福岡(FUK) → 台北(TPE)')" title="削除" class="p-1.5 hover:text-rose-400 hover:bg-slate-800 rounded transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-start justify-between">
+            <div>
+              <div class="text-xl font-bold text-white flex items-center space-x-2">
+                <span>FUK</span>
+                <i data-lucide="arrow-right" class="w-4 h-4 text-sky-400"></i>
+                <span>TPE</span>
+              </div>
+              <div class="text-xs text-slate-400 mt-0.5">福岡 → 台北(桃園)</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-semibold text-white">
+                <span class="text-sky-400">往:</span> 10/01(木) 12:15 → 13:50
+              </div>
+              <div class="text-xs font-semibold text-white mt-0.5">
+                <span class="text-indigo-400">復:</span> 10/04(日) 16:30 → 19:55
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1">直行便 / 所要 2h30m</div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-2 gap-2">
+            <div>
+              <div class="text-xs text-slate-400">前回取得 最安会社</div>
+              <div class="text-sm font-semibold text-white mt-0.5 flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span>エバー航空 (BR)</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1 flex items-center space-x-1">
+                <i data-lucide="clock" class="w-3 h-3"></i>
+                <span>停止日時: 2026/08/28 18:00</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-400">前回最安値</div>
+              <div class="text-xl font-bold text-slate-300">¥42,000</div>
+              <div class="text-xs text-slate-400">目標: ¥38,000 以下</div>
+            </div>
+          </div>
+
+          <!-- User Note Box -->
+          <div class="mt-3 p-2 bg-slate-900/90 border border-slate-800 rounded-lg text-[11px] text-slate-300 flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 truncate">
+              <i data-lucide="file-text" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+              <span class="truncate font-mono">メモ: 友人との週末旅行。LCC以外のフルサービス希望</span>
+            </div>
+            <button onclick="openQuickNoteModal('FUK-TPE', '友人との週末旅行。LCC以外のフルサービス希望')" title="メモを編集" class="text-slate-400 hover:text-white ml-2 shrink-0 p-1 hover:bg-slate-800 rounded transition"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+          <span class="text-xs text-slate-500">手動で「再開」ボタンを押すと巡回を再開します</span>
+          <button onclick="openEditModal('FUK-TPE')" class="text-xs font-semibold text-sky-400 hover:text-sky-300 flex items-center space-x-1">
+            <span>設定変更</span>
+            <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 4: KIX -> BKK (Error) -->
+      <div data-status="error" data-route="KIX-BKK" data-airlines="" data-search="KIX BKK 大阪 関西 バンコク エラー" class="taskCard bg-slate-950 border border-rose-900/60 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-xs font-medium bg-rose-950 text-rose-300 border border-rose-800/60 flex items-center space-x-1">
+                <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                <span>巡回エラー</span>
+              </span>
+              <span class="text-xs text-slate-400">片道 (直行便)</span>
+            </div>
+            <div class="flex items-center space-x-1 text-slate-400">
+              <button onclick="triggerImmediateRun('KIX-BKK')" title="手動再試行" class="p-1.5 hover:text-sky-400 hover:bg-slate-800 rounded transition text-rose-400"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openEditModal('KIX-BKK')" title="設定変更" class="p-1.5 hover:text-white hover:bg-slate-800 rounded transition"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i></button>
+              <button onclick="openDeleteModal('KIX-BKK', '関西(KIX) → バンコク(BKK)')" title="削除" class="p-1.5 hover:text-rose-400 hover:bg-slate-800 rounded transition"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-start justify-between">
+            <div>
+              <div class="text-xl font-bold text-white flex items-center space-x-2">
+                <span>KIX</span>
+                <i data-lucide="arrow-right" class="w-4 h-4 text-sky-400"></i>
+                <span>BKK</span>
+              </div>
+              <div class="text-xs text-slate-400 mt-0.5">関西 → バンコク(スワンナプーム)</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-semibold text-white">
+                <span class="text-sky-400">片道:</span> 09/15(火) 11:00 → 15:00
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1">直行便 / 所要 6h00m</div>
+            </div>
+          </div>
+
+          <div class="mt-4 p-3 rounded-lg bg-rose-950/40 border border-rose-800/40 text-xs text-rose-300">
+            <span class="font-bold">エラー理由:</span> 巡回タイムアウト（Cookie同意待機超過）。次回定期実行で自動再試行されます。
+          </div>
+
+          <!-- User Note Box -->
+          <div class="mt-3 p-2 bg-slate-900/90 border border-slate-800 rounded-lg text-[11px] text-slate-300 flex items-center justify-between">
+            <div class="flex items-center space-x-1.5 truncate">
+              <i data-lucide="file-text" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+              <span class="truncate font-mono">メモ: 9月中旬のタイ出張。夕方前到着希望</span>
+            </div>
+            <button onclick="openQuickNoteModal('KIX-BKK', '9月中旬のタイ出張。夕方前到着希望')" title="メモを編集" class="text-slate-400 hover:text-white ml-2 shrink-0 p-1 hover:bg-slate-800 rounded transition"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+          <button onclick="triggerImmediateRun('KIX-BKK')" class="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+            <span>今すぐ再試行</span>
+          </button>
+          <span class="text-xs text-slate-500">連続失敗: 1回</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- VIEW 2: Excel-like List Table View -->
+    <div id="listView" class="hidden bg-slate-950 border border-slate-800 rounded-xl overflow-visible shadow-sm">
+
+      <!-- Synchronized Active Filters Chips Bar -->
+      <div id="activeFilterChipsBar" class="px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex items-center space-x-2 flex-wrap gap-1.5">
+          <span class="text-slate-400 flex items-center space-x-1 font-medium">
+            <i data-lucide="filter" class="w-3 h-3 text-sky-400"></i>
+            <span>適用中のフィルタ:</span>
+          </span>
+          <span id="chipStatus" class="hidden inline-flex items-center px-2 py-0.5 rounded-md bg-sky-950 text-sky-300 border border-sky-800 text-[11px]">
+            <span>ステータス: <strong id="chipStatusVal">監視中</strong></span>
+            <button onclick="setStatusFilter('all')" class="ml-1 text-sky-400 hover:text-white">✕</button>
+          </span>
+          <span id="chipAirline" class="hidden inline-flex items-center px-2 py-0.5 rounded-md bg-sky-950 text-sky-300 border border-sky-800 text-[11px]">
+            <span>航空会社: <strong id="chipAirlineVal">ANA</strong></span>
+            <button onclick="clearAirlineFilter()" class="ml-1 text-sky-400 hover:text-white">✕</button>
+          </span>
+          <span id="chipRoute" class="hidden inline-flex items-center px-2 py-0.5 rounded-md bg-sky-950 text-sky-300 border border-sky-800 text-[11px]">
+            <span>区間: <strong id="chipRouteVal">HND-CDG</strong></span>
+            <button onclick="clearRouteFilter()" class="ml-1 text-sky-400 hover:text-white">✕</button>
+          </span>
+          <span id="noFilterLabel" class="text-slate-500 italic text-[11px]">（すべてのタスクを表示中。上のタブまたは列の 🔽 から絞り込めます）</span>
+        </div>
+        <div class="flex items-center space-x-3 text-slate-400 text-[11px]">
+          <span id="filterCountSummary">表示中: <strong class="text-white">4</strong> / 全4件</span>
+          <button onclick="resetAllFilters()" class="text-sky-400 hover:text-sky-300 underline font-medium">全解除</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800 select-none">
+            <tr>
+              <!-- Col 1: Status Filter -->
+              <th class="px-3 py-2.5 relative whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span>ステータス</span>
+                  <button id="btnFilterStatus" onclick="toggleFilterMenu(event, 'statusDropdown')" title="ステータスで絞り込み" class="p-1 rounded hover:bg-slate-800 hover:text-white transition flex items-center">
+                    <i data-lucide="filter" class="w-3 h-3 text-slate-400"></i>
+                  </button>
+                </div>
+                <!-- Excel-like Status Filter Dropdown (Directly mirrors the top status tabs) -->
+                <div id="statusDropdown" class="hidden absolute top-full left-2 mt-1 w-52 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 p-3 text-xs space-y-2.5 whitespace-normal">
+                  <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span class="font-bold text-white">ステータス絞り込み</span>
+                    <button onclick="closeAllFilterMenus()" class="text-slate-400 hover:text-white">✕</button>
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="radio" name="statusFilterRadio" onchange="setStatusFilter('all')" class="statusRadio" value="all" checked>
+                      <span>すべて表示 (全4件)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="radio" name="statusFilterRadio" onchange="setStatusFilter('active')" class="statusRadio" value="active">
+                      <span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 text-[10px]">目標達成 / 監視中 (2件)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="radio" name="statusFilterRadio" onchange="setStatusFilter('paused')" class="statusRadio" value="paused">
+                      <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">一時停止中 (1件)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="radio" name="statusFilterRadio" onchange="setStatusFilter('error')" class="statusRadio" value="error">
+                      <span class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px]">エラー (1件)</span>
+                    </label>
+                  </div>
+                </div>
+              </th>
+
+              <!-- Col 2: Route Filter -->
+              <th class="px-3 py-2.5 relative whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span>区間</span>
+                  <button id="btnFilterRoute" onclick="toggleFilterMenu(event, 'routeDropdown')" title="区間で絞り込み" class="p-1 rounded hover:bg-slate-800 hover:text-white transition flex items-center">
+                    <i data-lucide="filter" class="w-3 h-3 text-slate-400"></i>
+                  </button>
+                </div>
+                <div id="routeDropdown" class="hidden absolute top-full left-2 mt-1 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 p-3 text-xs space-y-2.5 whitespace-normal">
+                  <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span class="font-bold text-white">区間 絞り込み</span>
+                    <button onclick="closeAllFilterMenus()" class="text-slate-400 hover:text-white">✕</button>
+                  </div>
+                  <div class="space-y-1.5 max-h-40 overflow-y-auto">
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="routeFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="HND-CDG">
+                      <span>HND → CDG (東京/パリ)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="routeFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="NRT-LAX">
+                      <span>NRT → LAX (成田/LA)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="routeFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="FUK-TPE">
+                      <span>FUK → TPE (福岡/台北)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="routeFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="KIX-BKK">
+                      <span>KIX → BKK (関西/バンコク)</span>
+                    </label>
+                  </div>
+                </div>
+              </th>
+
+              <!-- Col 3: Schedule -->
+              <th class="px-3 py-2.5 whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span>日程・発着時刻</span>
+                  <span class="text-[10px] text-slate-500 font-normal">(現地時間)</span>
+                </div>
+              </th>
+
+              <!-- Col 4: Stops & Duration (2段表示) -->
+              <th class="px-3 py-2.5 whitespace-nowrap">乗継 / 所要時間</th>
+
+              <!-- Col 5: Airline Filter (2段表示) -->
+              <th class="px-3 py-2.5 relative whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span>最安航空会社 (往/復)</span>
+                  <button id="btnFilterAirline" onclick="toggleFilterMenu(event, 'airlineDropdown')" title="航空会社で絞り込み" class="p-1 rounded hover:bg-slate-800 hover:text-white transition flex items-center">
+                    <i data-lucide="filter" class="w-3 h-3 text-slate-400"></i>
+                  </button>
+                </div>
+                <div id="airlineDropdown" class="hidden absolute top-full left-2 mt-1 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 p-3 text-xs space-y-2.5 whitespace-normal">
+                  <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span class="font-bold text-white">航空会社 絞り込み</span>
+                    <button onclick="closeAllFilterMenus()" class="text-slate-400 hover:text-white">✕</button>
+                  </div>
+                  <div class="space-y-1.5 max-h-40 overflow-y-auto">
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="airlineFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="AF">
+                      <span>エールフランス (AF)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="airlineFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="ANA">
+                      <span>全日空 (ANA)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="airlineFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="JAL">
+                      <span>日本航空 (JAL)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 text-slate-300 hover:bg-slate-800/50 p-1 rounded cursor-pointer">
+                      <input type="checkbox" checked onchange="applyAllFilters()" class="airlineFilterCheck rounded border-slate-700 bg-slate-950 text-sky-500" value="BR">
+                      <span>エバー航空 (BR)</span>
+                    </label>
+                  </div>
+                </div>
+              </th>
+
+              <!-- Col 6: Price Sort -->
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">
+                <div class="flex items-center justify-end space-x-1">
+                  <span>現在最安値</span>
+                  <button onclick="toggleSortPrice()" title="価格順ソート" class="p-1 rounded hover:bg-slate-800 hover:text-white transition">
+                    <i data-lucide="arrow-up-down" class="w-3 h-3 text-slate-400"></i>
+                  </button>
+                </div>
+              </th>
+
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">目標価格</th>
+
+              <!-- Col 8: User Memo -->
+              <th class="px-3 py-2.5 whitespace-nowrap">メモ / 要望</th>
+
+              <!-- Col 9: Date Captured -->
+              <th class="px-3 py-2.5 whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span>取得日時</span>
+                  <span class="text-[10px] text-slate-500 font-normal">(JST)</span>
+                  <button onclick="toggleSortDate()" title="取得日時順ソート" class="p-1 rounded hover:bg-slate-800 hover:text-white transition">
+                    <i data-lucide="arrow-up-down" class="w-3 h-3 text-slate-400"></i>
+                  </button>
+                </div>
+              </th>
+
+              <!-- Col 10: Actions (2段表示) -->
+              <th class="px-3 py-2.5 text-center whitespace-nowrap">操作</th>
+            </tr>
+          </thead>
+
+          <tbody id="tableBody" class="divide-y divide-slate-800/80">
+            <!-- Row 1: HND-CDG -->
+            <tr data-status="active" data-route="HND-CDG" data-airlines="AF,ANA,SQ" data-price="148200" data-search="HND CDG 東京 羽田 パリ エールフランス ANA SQ 目標達成" class="tableRow hover:bg-slate-900/60 transition">
+              <td class="px-3 py-2.5 whitespace-nowrap"><span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-emerald-950 text-emerald-300 border border-emerald-800/60 whitespace-nowrap">目標達成</span></td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="font-bold text-white flex items-center space-x-1">
+                  <span>HND</span>
+                  <i data-lucide="arrow-right" class="w-3 h-3 text-sky-400"></i>
+                  <span>CDG</span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5">東京(羽田) → パリ</div>
+              </td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-white font-medium flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">往</span>
+                  <span>05/01(金) 10:35 → 07:15<span class="text-slate-400 text-[10px]">(+1)</span></span>
+                </div>
+                <div class="text-slate-300 text-[11px] mt-0.5 flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">復</span>
+                  <span>05/08(金) 20:00 → 16:55<span class="text-slate-400 text-[10px]">(+1)</span></span>
+                </div>
+              </td>
+              <!-- 乗継 / 所要時間 2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-amber-300 font-medium">1回 (SIN)</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">所要 22h 40m</div>
+              </td>
+              <!-- 最安航空会社 往復2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">往</span>
+                  <span class="font-medium text-slate-200">ANA + SQ</span>
+                </div>
+                <div class="flex items-center space-x-1 mt-0.5">
+                  <span class="px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">復</span>
+                  <span class="text-slate-300">エールフランス</span>
+                </div>
+              </td>
+              <!-- Col 6: Price & Source Provider -->
+              <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                <div class="font-bold text-emerald-400">¥148,200</div>
+                <div class="mt-0.5"><span class="inline-block px-1.5 py-0.2 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 text-[10px] font-semibold">Google</span></div>
+              </td>
+              <td class="px-3 py-2.5 text-right text-slate-400 whitespace-nowrap">¥160,000</td>
+              <td class="px-3 py-2.5 max-w-[160px] whitespace-nowrap">
+                <div class="truncate text-[11px] text-slate-300 flex items-center space-x-1 cursor-pointer hover:text-sky-300" onclick="openQuickNoteModal('HND-CDG', 'GW休暇用。羽田発着希望、荷物預けあり')">
+                  <i data-lucide="file-text" class="w-3 h-3 text-sky-400 shrink-0"></i>
+                  <span class="truncate">GW休暇用。羽田発着希望、荷物預けあり</span>
+                </div>
+              </td>
+              <!-- 取得日時: 年＋時刻(JST) 2段表示 -->
+              <td class="px-3 py-2.5 text-slate-300 text-xs whitespace-nowrap">
+                <div>2026/08/29</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">14:00 (JST)</div>
+              </td>
+              <!-- 操作 2段表示 -->
+              <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                <div><button onclick="openDetailModal('HND-CDG')" class="text-sky-400 hover:underline text-xs">詳細</button></div>
+                <div class="mt-0.5"><button onclick="openEditModal('HND-CDG')" class="text-slate-400 hover:underline text-[11px]">編集</button></div>
+              </td>
+            </tr>
+
+            <!-- Row 2: NRT-LAX -->
+            <tr data-status="active" data-route="NRT-LAX" data-airlines="JAL,ANA" data-price="185000" data-search="NRT LAX 東京 成田 ロサンゼルス JAL ANA 監視中" class="tableRow hover:bg-slate-900/60 transition">
+              <td class="px-3 py-2.5 whitespace-nowrap"><span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-sky-950 text-sky-300 border border-sky-800/60 whitespace-nowrap">監視中</span></td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="font-bold text-white flex items-center space-x-1">
+                  <span>NRT</span>
+                  <i data-lucide="arrow-right" class="w-3 h-3 text-sky-400"></i>
+                  <span>LAX</span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5">東京(成田) → LA</div>
+              </td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-white font-medium flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">往</span>
+                  <span>08/10(月) 17:05 → 11:15</span>
+                </div>
+                <div class="text-slate-300 text-[11px] mt-0.5 flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">復</span>
+                  <span>08/18(火) 13:20 → 16:45<span class="text-slate-400 text-[10px]">(+1)</span></span>
+                </div>
+              </td>
+              <!-- 乗継 / 所要時間 2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-emerald-400 font-medium">直行便</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">所要 10h 10m</div>
+              </td>
+              <!-- 最安航空会社 往復2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">往</span>
+                  <span class="font-medium text-slate-200">日本航空 (JAL)</span>
+                </div>
+                <div class="flex items-center space-x-1 mt-0.5">
+                  <span class="px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">復</span>
+                  <span class="text-slate-300">全日空 (ANA)</span>
+                </div>
+              </td>
+              <!-- Col 6: Price & Source Provider -->
+              <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                <div class="font-bold text-white">¥185,000</div>
+                <div class="mt-0.5"><span class="inline-block px-1.5 py-0.2 rounded bg-sky-950 border border-sky-800 text-sky-300 text-[10px] font-semibold">Skyscanner</span></div>
+              </td>
+              <td class="px-3 py-2.5 text-right text-slate-400 whitespace-nowrap">¥150,000</td>
+              <td class="px-3 py-2.5 max-w-[160px] whitespace-nowrap">
+                <div class="truncate text-[11px] text-slate-300 flex items-center space-x-1 cursor-pointer hover:text-sky-300" onclick="openQuickNoteModal('NRT-LAX', '出張用。直行便必須、予算上限20万')">
+                  <i data-lucide="file-text" class="w-3 h-3 text-sky-400 shrink-0"></i>
+                  <span class="truncate">出張用。直行便必須、予算上限20万</span>
+                </div>
+              </td>
+              <!-- 取得日時: 年＋時刻(JST) 2段表示 -->
+              <td class="px-3 py-2.5 text-slate-300 text-xs whitespace-nowrap">
+                <div>2026/08/29</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">11:30 (JST)</div>
+              </td>
+              <!-- 操作 2段表示 -->
+              <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                <div><button onclick="openDetailModal('NRT-LAX')" class="text-sky-400 hover:underline text-xs">詳細</button></div>
+                <div class="mt-0.5"><button onclick="openEditModal('NRT-LAX')" class="text-slate-400 hover:underline text-[11px]">編集</button></div>
+              </td>
+            </tr>
+
+            <!-- Row 3: FUK-TPE -->
+            <tr data-status="paused" data-route="FUK-TPE" data-airlines="BR" data-price="42000" data-search="FUK TPE 福岡 台北 エバー航空 一時停止" class="tableRow hover:bg-slate-900/60 transition">
+              <td class="px-3 py-2.5 whitespace-nowrap"><span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">一時停止</span></td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="font-bold text-white flex items-center space-x-1">
+                  <span>FUK</span>
+                  <i data-lucide="arrow-right" class="w-3 h-3 text-sky-400"></i>
+                  <span>TPE</span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5">福岡 → 台北</div>
+              </td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-white font-medium flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">往</span>
+                  <span>10/01(木) 12:15 → 13:50</span>
+                </div>
+                <div class="text-slate-300 text-[11px] mt-0.5 flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">復</span>
+                  <span>10/04(日) 16:30 → 19:55</span>
+                </div>
+              </td>
+              <!-- 乗継 / 所要時間 2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-emerald-400 font-medium">直行便</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">所要 2h 30m</div>
+              </td>
+              <!-- 最安航空会社 往復2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">往</span>
+                  <span class="font-medium text-slate-200">エバー航空 (BR)</span>
+                </div>
+                <div class="flex items-center space-x-1 mt-0.5">
+                  <span class="px-1 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px]">復</span>
+                  <span class="text-slate-300">エバー航空 (BR)</span>
+                </div>
+              </td>
+              <!-- Col 6: Price & Source Provider -->
+              <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                <div class="font-bold text-slate-300">¥42,000</div>
+                <div class="mt-0.5"><span class="inline-block px-1.5 py-0.2 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 text-[10px] font-semibold">Google</span></div>
+              </td>
+              <td class="px-3 py-2.5 text-right text-slate-400 whitespace-nowrap">¥38,000</td>
+              <td class="px-3 py-2.5 max-w-[160px] whitespace-nowrap">
+                <div class="truncate text-[11px] text-slate-300 flex items-center space-x-1 cursor-pointer hover:text-sky-300" onclick="openQuickNoteModal('FUK-TPE', '友人との週末旅行。LCC以外のフルサービス希望')">
+                  <i data-lucide="file-text" class="w-3 h-3 text-sky-400 shrink-0"></i>
+                  <span class="truncate">友人との週末旅行。LCC以外のフルサービス希望</span>
+                </div>
+              </td>
+              <!-- 取得日時: 年＋時刻(JST) 2段表示 -->
+              <td class="px-3 py-2.5 text-slate-300 text-xs whitespace-nowrap">
+                <div>2026/08/28</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">18:00 (JST)</div>
+              </td>
+              <!-- 操作 2段表示 -->
+              <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                <div><button onclick="showToast('タスクを再開しました', 'success')" class="text-emerald-400 hover:underline text-xs">再開</button></div>
+                <div class="mt-0.5"><button onclick="openEditModal('FUK-TPE')" class="text-slate-400 hover:underline text-[11px]">編集</button></div>
+              </td>
+            </tr>
+
+            <!-- Row 4: KIX-BKK -->
+            <tr data-status="error" data-route="KIX-BKK" data-airlines="" data-price="0" data-search="KIX BKK 大阪 関西 バンコク エラー" class="tableRow hover:bg-slate-900/60 transition">
+              <td class="px-3 py-2.5 whitespace-nowrap"><span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-rose-950 text-rose-300 border border-rose-800/60 whitespace-nowrap">エラー</span></td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="font-bold text-white flex items-center space-x-1">
+                  <span>KIX</span>
+                  <i data-lucide="arrow-right" class="w-3 h-3 text-sky-400"></i>
+                  <span>BKK</span>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5">関西 → バンコク</div>
+              </td>
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-white font-medium flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">片道</span>
+                  <span>09/15(火) 11:00 → 15:00</span>
+                </div>
+              </td>
+              <!-- 乗継 / 所要時間 2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="text-emerald-400 font-medium">直行便</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">所要 6h 00m</div>
+              </td>
+              <!-- 最安航空会社 往復2段表示 -->
+              <td class="px-3 py-2.5 whitespace-nowrap">
+                <div class="flex items-center space-x-1">
+                  <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">片道</span>
+                  <span class="text-slate-400">-</span>
+                </div>
+                <div class="text-[10px] text-rose-400 mt-0.5">未取得 (巡回エラー)</div>
+              </td>
+              <!-- Col 6: Price & Source Provider -->
+              <td class="px-3 py-2.5 text-right font-bold text-slate-500 whitespace-nowrap">
+                <div>-</div>
+                <div class="mt-0.5 text-[10px] text-slate-500 font-normal">-</div>
+              </td>
+              <td class="px-3 py-2.5 text-right text-slate-400 whitespace-nowrap">¥60,000</td>
+              <td class="px-3 py-2.5 max-w-[160px] whitespace-nowrap">
+                <div class="truncate text-[11px] text-slate-300 flex items-center space-x-1 cursor-pointer hover:text-sky-300" onclick="openQuickNoteModal('KIX-BKK', '9月中旬のタイ出張。夕方前到着希望')">
+                  <i data-lucide="file-text" class="w-3 h-3 text-sky-400 shrink-0"></i>
+                  <span class="truncate">9月中旬のタイ出張。夕方前到着希望</span>
+                </div>
+              </td>
+              <!-- 取得日時: 年＋時刻(JST) 2段表示 -->
+              <td class="px-3 py-2.5 text-slate-300 text-xs whitespace-nowrap">
+                <div>2026/08/29</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">13:45 (JST)</div>
+              </td>
+              <!-- 操作 2段表示 -->
+              <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                <div><button onclick="triggerImmediateRun('KIX-BKK')" class="text-rose-400 hover:underline text-xs">再試行</button></div>
+                <div class="mt-0.5"><button onclick="openEditModal('KIX-BKK')" class="text-slate-400 hover:underline text-[11px]">編集</button></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VIEW 3: Empty State Screen -->
+    <div id="emptyStateView" class="hidden bg-slate-950 border border-slate-800 border-dashed rounded-2xl p-12 text-center space-y-4">
+      <div class="w-16 h-16 bg-slate-900 border border-slate-700 text-sky-400 rounded-full flex items-center justify-center mx-auto">
+        <i data-lucide="plane-landing" class="w-8 h-8"></i>
+      </div>
+      <div>
+        <h3 class="text-base font-bold text-white">監視タスクがまだ登録されていません</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">希望の旅行先や出張ルートを登録すると、Google Flights と Skyscanner を自動巡回して最安値をウォッチします。</p>
+      </div>
+      <div class="pt-2 flex justify-center space-x-3">
+        <button onclick="openNewTaskModal()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-sm">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>最初のタスクを登録する</span>
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL 1: Detail Modal -->
+  <div id="detailModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-950 border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 bg-sky-600/20 text-sky-400 rounded-lg">
+            <i data-lucide="trending-down" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">HND → CDG (2026/05/01 - 2026/05/08)</h3>
+            <p class="text-xs text-slate-400">最安旅程の所要時間・フライト時間・トランジット時間・便名 &amp; 価格履歴</p>
+          </div>
+        </div>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-white p-2"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-6">
+        <!-- AI Advice Box -->
+        <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-start space-x-3">
+          <div class="p-1.5 bg-sky-600 rounded text-white mt-0.5">
+            <i data-lucide="bot" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="text-xs font-semibold text-sky-400">AI 買い時分析コメント (OpenRouter)</div>
+            <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+              現在、過去30日間の最安値水準（¥148,200 / 往路: ANA+シンガポール航空, 復路: エールフランス）を記録しています。GW期間としては相場より約30%安く、目標価格（¥160,000）をクリアしているため、即時予約を推奨します。
+            </p>
+          </div>
+        </div>
+
+        <!-- Strict Flight Data Breakdown -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="route" class="w-4 h-4 text-sky-400"></i>
+              <span class="text-xs font-bold text-white">最安便の区間詳細（日程・フライト時間・トランジット時間・便名）</span>
+            </div>
+            <span class="text-xs text-emerald-400 font-bold">総額: ¥148,200 (Google Flights)</span>
+          </div>
+
+          <!-- Outbound Leg -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800">往路</span>
+                <span>2026年5月1日 (金)</span>
+              </div>
+              <span class="text-slate-400 font-normal">総所要時間: <strong class="text-white">22時間40分</strong> (フライト合計: 20h25m / トランジット: 2h15m)</span>
+            </div>
+
+            <!-- Segment 1: HND -> SIN (ANA) -->
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center space-x-3">
+                <div class="font-bold text-white">10:35 <span class="text-slate-400 font-normal">HND(羽田)</span></div>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-500"></i>
+                <div class="font-bold text-white">16:35 <span class="text-slate-400 font-normal">SIN(シンガポール)</span></div>
+              </div>
+              <div class="flex items-center space-x-3 text-slate-300">
+                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-medium">全日空 (NH841)</span>
+                <span class="text-slate-400 font-mono">フライト時間: 7時間00分</span>
+              </div>
+            </div>
+
+            <!-- Layover Info -->
+            <div class="pl-4 border-l-2 border-dashed border-slate-700 py-1 text-[11px] text-amber-400/90 flex items-center space-x-1.5 font-mono">
+              <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+              <span>トランジット (乗継待ち時間): 2時間15分 @ シンガポール・チャンギ空港 (SIN)</span>
+            </div>
+
+            <!-- Segment 2: SIN -> CDG (Singapore Airlines) -->
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center space-x-3">
+                <div class="font-bold text-white">18:50 <span class="text-slate-400 font-normal">SIN(シンガポール)</span></div>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-500"></i>
+                <div class="font-bold text-white">07:15 (+1日) <span class="text-slate-400 font-normal">CDG(パリ)</span></div>
+              </div>
+              <div class="flex items-center space-x-3 text-slate-300">
+                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-medium">シンガポール航空 (SQ336)</span>
+                <span class="text-slate-400 font-mono">フライト時間: 13時間25分</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inbound Leg -->
+          <div class="space-y-2 pt-2 border-t border-slate-800/80">
+            <div class="flex items-center justify-between text-xs font-bold text-slate-300">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">復路</span>
+                <span>2026年5月8日 (金)</span>
+              </div>
+              <span class="text-slate-400 font-normal">総所要時間: <strong class="text-white">14時間55分</strong> (直行便 / トランジットなし)</span>
+            </div>
+
+            <!-- Segment 3: CDG -> HND (Air France) -->
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="font-bold text-white">20:00 <span class="text-slate-400 font-normal">CDG(パリ)</span></div>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-500"></i>
+              <div class="font-bold text-white">16:55 (+1日) <span class="text-slate-400 font-normal">HND(羽田)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-slate-300">最安値 推移チャート (JPY)</span>
+            <div class="flex items-center space-x-4 text-xs font-medium">
+              <span class="text-emerald-400 flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Google Flights</span></span>
+              <span class="text-sky-400 flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-sky-400"></span><span>Skyscanner</span></span>
+              <span class="text-rose-400 flex items-center space-x-1"><span class="w-2 h-2 border-t-2 border-dashed border-rose-400"></span><span>目標価格 (¥160,000)</span></span>
+            </div>
+          </div>
+          <div class="h-52">
+            <canvas id="priceChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Multi-Flight Offer Table -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-xs font-bold text-white flex items-center space-x-1.5">
+              <i data-lucide="list" class="w-3.5 h-3.5 text-sky-400"></i>
+              <span>同日・同区間の候補便一覧</span>
+            </h4>
+            <span class="text-xs text-slate-400">データ取得日時: 2026/08/29 14:00:15 (JST)</span>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-800 rounded-lg">
+            <table class="w-full text-left text-xs text-slate-300 min-w-max">
+              <thead class="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800 whitespace-nowrap">
+                <tr>
+                  <th class="px-3 py-2">ソース</th>
+                  <th class="px-3 py-2">航空会社 (往復/乗継)</th>
+                  <th class="px-3 py-2">発着時刻 (現地時間)</th>
+                  <th class="px-3 py-2">乗継</th>
+                  <th class="px-3 py-2">所要時間</th>
+                  <th class="px-3 py-2 text-right">価格 (総額)</th>
+                  <th class="px-3 py-2 text-center">リンク</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800">
+                <tr class="hover:bg-slate-900/50">
+                  <td class="px-3 py-2"><span class="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 font-semibold">Google</span></td>
+                  <td class="px-3 py-2 font-semibold text-white">ANA + SQ / 復: AF</td>
+                  <td class="px-3 py-2">10:35 HND → 07:15(+1) CDG</td>
+                  <td class="px-3 py-2 text-amber-300 font-medium">1回 (SIN 2h15m)</td>
+                  <td class="px-3 py-2">22h 40m</td>
+                  <td class="px-3 py-2 text-right font-bold text-emerald-400">¥148,200</td>
+                  <td class="px-3 py-2 text-center"><a href="https://flights.google.com" target="_blank" class="text-emerald-400 hover:underline">予約</a></td>
+                </tr>
+                <tr class="hover:bg-slate-900/50">
+                  <td class="px-3 py-2"><span class="px-2 py-0.5 rounded bg-sky-950 border border-sky-800 text-sky-300 font-semibold">Skyscanner</span></td>
+                  <td class="px-3 py-2 font-semibold text-white">カタール航空 (往復)</td>
+                  <td class="px-3 py-2">23:55 HND → 13:20(+1) CDG</td>
+                  <td class="px-3 py-2 text-slate-300">1回 (DOH 3h05m)</td>
+                  <td class="px-3 py-2">20h 25m</td>
+                  <td class="px-3 py-2 text-right font-bold text-white">¥152,400</td>
+                  <td class="px-3 py-2 text-center"><a href="https://skyscanner.jp" target="_blank" class="text-sky-400 hover:underline">予約</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: New Task Modal -->
+  <div id="newTaskModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-sky-400"></i>
+          <span>新規フライト監視タスク登録</span>
+        </h3>
+        <button onclick="closeNewTaskModal()" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <form id="taskForm" class="space-y-4 text-xs" onsubmit="handleCreateTask(event)">
+        <div>
+          <label class="block text-slate-400 font-medium mb-1">旅行タイプ</label>
+          <div class="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800">
+            <button type="button" id="btnRoundTrip" onclick="setTripType('RoundTrip')" class="py-1.5 text-center rounded-md font-medium bg-sky-600 text-white">往復</button>
+            <button type="button" id="btnOneWay" onclick="setTripType('OneWay')" class="py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white">片道</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">出発地 (都市名またはIATA)</label>
+            <input list="airportsList" type="text" id="formOrigin" value="HND - 東京(羽田)" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-sky-500">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">目的地 (都市名またはIATA)</label>
+            <input list="airportsList" type="text" id="formDestination" value="CDG - パリ(シャルル・ド・ゴール)" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-sky-500">
+          </div>
+        </div>
+
+        <datalist id="airportsList">
+          <option value="HND - 東京(羽田)"></option>
+          <option value="NRT - 東京(成田)"></option>
+          <option value="KIX - 大阪(関西)"></option>
+          <option value="ITM - 大阪(伊丹)"></option>
+          <option value="FUK - 福岡"></option>
+          <option value="CTS - 札幌(新千歳)"></option>
+          <option value="CDG - パリ(シャルル・ド・ゴール)"></option>
+          <option value="LHR - ロンドン(ヒースロー)"></option>
+          <option value="LAX - ロサンゼルス"></option>
+          <option value="SFO - サンフランシスコ"></option>
+          <option value="HNL - ホノルル"></option>
+          <option value="BKK - バンコク(スワンナプーム)"></option>
+          <option value="SIN - シンガポール(チャンギ)"></option>
+          <option value="TPE - 台北(桃園)"></option>
+        </datalist>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">往路出発日</label>
+            <input type="date" id="formOutboundDate" value="2026-05-01" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+          </div>
+          <div id="inboundDateContainer">
+            <label class="block text-slate-400 font-medium mb-1">復路出発日</label>
+            <input type="date" id="formInboundDate" value="2026-05-08" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">許容乗継回数 (Max Stops)</label>
+            <select id="formMaxStops" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="Any">乗継制限なし (最安重視・推奨)</option>
+              <option value="1" selected>1回乗継まで</option>
+              <option value="DirectOnly">直行便のみ (0回乗継)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">巡回間隔</label>
+            <select id="formInterval" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="default">全体設定に従う (現在 12h)</option>
+              <option value="3">3時間ごと</option>
+              <option value="6">6時間ごと</option>
+              <option value="12">12時間ごと</option>
+              <option value="24">24時間ごと</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">目標アラート価格 (JPY)</label>
+            <input type="number" id="formTargetPrice" value="160000" placeholder="例: 160000" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">優先航空会社 (任意)</label>
+            <input type="text" id="formAirlines" placeholder="例: ANA, JAL, エールフランス" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 font-medium mb-1">構造化メモ / 要望・制約（任意）</label>
+          <textarea id="formNotes" rows="2" placeholder="例: - 荷物制限なし希望&#10;- ホテル最寄り空港優先" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500"></textarea>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="flex items-center space-x-2 text-slate-300">
+            <input type="checkbox" id="useDefaultWebhook" checked class="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-900">
+            <span>デフォルトの Discord Webhook に通知する</span>
+          </label>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex justify-end space-x-2">
+          <button type="button" onclick="closeNewTaskModal()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium">キャンセル</button>
+          <button type="submit" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold">登録して巡回開始</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 3: Task Edit Modal -->
+  <div id="editModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-sky-400"></i>
+          <span>タスク設定の変更: <span id="editTaskTitle" class="text-sky-400 font-semibold">HND → CDG</span></span>
+        </h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <form class="space-y-4 text-xs" onsubmit="handleUpdateTask(event)">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">目標価格 (JPY)</label>
+            <input type="number" id="editTargetPrice" value="155000" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">許容乗継回数</label>
+            <select id="editMaxStops" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="Any">乗継制限なし</option>
+              <option value="1" selected>1回乗継まで</option>
+              <option value="DirectOnly">直行便のみ</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">巡回間隔</label>
+            <select id="editInterval" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+              <option value="6">6時間ごと</option>
+              <option value="12" selected>12時間ごと</option>
+              <option value="24">24時間ごと</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">優先航空会社</label>
+            <input type="text" id="editAirlines" value="エールフランス, ANA, シンガポール航空" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 font-medium mb-1">個別 Webhook 通知 URL (空欄時は全体デフォルト使用)</label>
+          <input type="url" placeholder="https://discord.com/api/webhooks/..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex justify-end space-x-2">
+          <button type="button" onclick="closeEditModal()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium">キャンセル</button>
+          <button type="submit" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold">変更を保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: Global Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-sky-400"></i>
+          <span>システム全体設定 (Global Settings)</span>
+        </h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">全体デフォルト巡回間隔 (Default Check Interval)</label>
+          <select id="globalDefaultInterval" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+            <option value="3">3時間ごと</option>
+            <option value="6">6時間ごと</option>
+            <option value="12" selected>12時間ごと (推奨・初期値)</option>
+            <option value="24">24時間ごと</option>
+          </select>
+          <p class="text-[11px] text-slate-400 mt-1">※ タスク登録時に個別の巡回間隔を指定しなかった場合、この間隔で定期巡回されます。</p>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">デフォルト Discord Webhook URL</label>
+          <div class="flex gap-2">
+            <input type="url" value="https://discord.com/api/webhooks/123456789/xxxxxx" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+            <button onclick="showToast('テスト通知を Discord に送信しました', 'success')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sky-300 font-medium">テスト送信</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">OpenRouter API Key (AI支援機能用)</label>
+          <input type="password" value="sk-or-v1-xxxxxxxxxxxxxxxxxxxx" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">スクレイピングプロバイダー設定</label>
+          <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
+            <label class="flex items-center space-x-2 text-slate-300">
+              <input type="checkbox" checked class="rounded border-slate-700 text-sky-600 bg-slate-950">
+              <span>Google Flights 巡回を有効化</span>
+            </label>
+            <label class="flex items-center space-x-2 text-slate-300">
+              <input type="checkbox" checked class="rounded border-slate-700 text-sky-600 bg-slate-950">
+              <span>Skyscanner 巡回を有効化</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex justify-end space-x-2">
+          <button onclick="closeSettingsModal()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium">閉じる</button>
+          <button onclick="saveSettings()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold">設定を保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: Delete Confirmation Modal -->
+  <div id="deleteModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-950 border border-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+      <div class="w-12 h-12 rounded-full bg-rose-950 text-rose-400 flex items-center justify-center mx-auto border border-rose-800">
+        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+      </div>
+      <div class="text-center">
+        <h3 class="text-sm font-bold text-white">監視タスクを削除しますか？</h3>
+        <p id="deleteTaskRoute" class="text-xs text-rose-300 font-semibold mt-1">東京(羽田) → パリ(CDG)</p>
+        <p class="text-xs text-slate-400 mt-2">このタスクおよび蓄積された価格履歴データがすべて完全に削除されます。</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+        <button onclick="closeDeleteModal()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">キャンセル</button>
+        <button onclick="confirmDelete()" class="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold">削除する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: Quick Note Edit Modal -->
+  <div id="quickNoteModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-950 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-sky-400"></i>
+          <span>タスクのメモ・要望編集: <span id="quickNoteRouteTitle" class="text-sky-400 font-mono">HND-CDG</span></span>
+        </h3>
+        <button onclick="closeQuickNoteModal()" class="text-slate-400 hover:text-white p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">ユーザーメモ / 要望・制約（Markdown・箇条書き可）</label>
+          <textarea id="quickNoteText" rows="4" placeholder="例: - 家族旅行のため荷物預けあり必須&#10;- 現地午前着希望" 
+                    class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500 leading-relaxed"></textarea>
+        </div>
+        <p class="text-[11px] text-slate-400">※ このメモはタスクカードおよび一覧リストに表示され、AI買い時分析の参照情報としても活用されます。</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+        <button onclick="closeQuickNoteModal()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">キャンセル</button>
+        <button onclick="saveQuickNote()" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold">メモを保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // ==========================================
+    // Unified State Model (Single Source of Truth)
+    // ==========================================
+    const state = {
+      view: 'cards',           // 'cards' | 'list'
+      status: 'all',          // 'all' | 'active' | 'paused' | 'error' | 'empty'
+      selectedRoutes: ['HND-CDG', 'NRT-LAX', 'FUK-TPE', 'KIX-BKK'],
+      selectedAirlines: ['AF', 'ANA', 'JAL', 'BR'],
+      sortPriceAsc: true
+    };
+
+    const statusLabels = {
+      all: 'すべて',
+      active: '監視中',
+      paused: '一時停止',
+      error: 'エラー',
+      empty: '未登録'
+    };
+
+    // Called when user clicks top status tab
+    function setStatusFilter(status) {
+      state.status = status;
+      closeAllFilterMenus();
+      renderDashboard();
+    }
+
+    // Called when user switches view (Cards / List)
+    function switchView(view) {
+      state.view = view;
+      renderDashboard();
+    }
+
+    // Master Render Function
+    function renderDashboard() {
+      const cardsView = document.getElementById('cardsView');
+      const listView = document.getElementById('listView');
+      const emptyStateView = document.getElementById('emptyStateView');
+      const btnCards = document.getElementById('btnViewCards');
+      const btnList = document.getElementById('btnViewList');
+
+      // 1. Synchronize Top Status Tab Styles
+      ['all', 'active', 'paused', 'error', 'empty'].forEach(tab => {
+        const el = document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1));
+        if (el) {
+          if (tab === state.status) {
+            el.className = 'px-3 py-1.5 rounded-md text-xs font-medium bg-sky-600 text-white';
+          } else {
+            el.className = 'px-3 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800';
+          }
+        }
+      });
+
+      // 2. Synchronize Status Dropdown Radios
+      document.querySelectorAll('.statusRadio').forEach(r => {
+        r.checked = (r.value === state.status);
+      });
+
+      // 3. Synchronize View Buttons
+      if (state.view === 'cards') {
+        btnCards.className = 'px-2.5 py-1 rounded text-xs font-medium bg-slate-800 text-white flex items-center space-x-1';
+        btnList.className = 'px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white flex items-center space-x-1';
+      } else {
+        btnList.className = 'px-2.5 py-1 rounded text-xs font-medium bg-slate-800 text-white flex items-center space-x-1';
+        btnCards.className = 'px-2.5 py-1 rounded text-xs font-medium text-slate-400 hover:text-white flex items-center space-x-1';
+      }
+
+      // 4. Handle Empty State Mode
+      if (state.status === 'empty') {
+        cardsView.classList.add('hidden');
+        listView.classList.add('hidden');
+        emptyStateView.classList.remove('hidden');
+        return;
+      }
+
+      emptyStateView.classList.add('hidden');
+
+      // 5. Filter Data (Cards & List Rows)
+      const query = (document.getElementById('quickSearchInput')?.value || '').trim().toLowerCase();
+      let visibleCount = 0;
+
+      // Filter Cards
+      document.querySelectorAll('.taskCard').forEach(card => {
+        const cStatus = card.getAttribute('data-status');
+        const cRoute = card.getAttribute('data-route');
+        const rawCAirlines = (card.getAttribute('data-airlines') || '').trim();
+        const cAirlines = rawCAirlines ? rawCAirlines.split(',') : [];
+        const cSearch = (card.getAttribute('data-search') || '').toLowerCase();
+
+        const matchStatus = (state.status === 'all' || cStatus === state.status);
+        const matchRoute = state.selectedRoutes.includes(cRoute);
+        const matchAirline = (cAirlines.length === 0) || cAirlines.some(a => state.selectedAirlines.includes(a));
+        const matchQuery = !query || cSearch.includes(query);
+
+        if (matchStatus && matchRoute && matchAirline && matchQuery) {
+          card.classList.remove('hidden');
+          visibleCount++;
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+
+      // Filter List Rows
+      document.querySelectorAll('.tableRow').forEach(row => {
+        const rStatus = row.getAttribute('data-status');
+        const rRoute = row.getAttribute('data-route');
+        const rawRAirlines = (row.getAttribute('data-airlines') || '').trim();
+        const rAirlines = rawRAirlines ? rawRAirlines.split(',') : [];
+        const rSearch = (row.getAttribute('data-search') || '').toLowerCase();
+
+        const matchStatus = (state.status === 'all' || rStatus === state.status);
+        const matchRoute = state.selectedRoutes.includes(rRoute);
+        const matchAirline = (rAirlines.length === 0) || rAirlines.some(a => state.selectedAirlines.includes(a));
+        const matchQuery = !query || rSearch.includes(query);
+
+        if (matchStatus && matchRoute && matchAirline && matchQuery) {
+          row.classList.remove('hidden');
+        } else {
+          row.classList.add('hidden');
+        }
+      });
+
+      // 6. Update Active Filter Chips & Header Badges
+      updateFilterChipsBar(visibleCount);
+
+      // 7. Toggle View Visibility
+      if (state.view === 'cards') {
+        cardsView.classList.remove('hidden');
+        listView.classList.add('hidden');
+      } else {
+        cardsView.classList.add('hidden');
+        listView.classList.remove('hidden');
+      }
+    }
+
+    function updateFilterChipsBar(visibleCount) {
+      document.getElementById('filterCountSummary').innerHTML = `表示中: <strong class="text-white">${visibleCount}</strong> / 全4件`;
+
+      const chipStatus = document.getElementById('chipStatus');
+      const chipRoute = document.getElementById('chipRoute');
+      const chipAirline = document.getElementById('chipAirline');
+      const noFilter = document.getElementById('noFilterLabel');
+
+      const isStatusFiltered = (state.status !== 'all');
+      const isRouteFiltered = (state.selectedRoutes.length < 4);
+      const isAirlineFiltered = (state.selectedAirlines.length < 4);
+
+      // Status Chip & Button
+      if (isStatusFiltered) {
+        chipStatus.classList.remove('hidden');
+        document.getElementById('chipStatusVal').innerText = statusLabels[state.status] || state.status;
+        document.getElementById('btnFilterStatus').classList.add('text-sky-400', 'bg-slate-800');
+      } else {
+        chipStatus.classList.add('hidden');
+        document.getElementById('btnFilterStatus').classList.remove('text-sky-400', 'bg-slate-800');
+      }
+
+      // Route Chip & Button
+      if (isRouteFiltered) {
+        chipRoute.classList.remove('hidden');
+        document.getElementById('chipRouteVal').innerText = `${state.selectedRoutes.length}区間選択中`;
+        document.getElementById('btnFilterRoute').classList.add('text-sky-400', 'bg-slate-800');
+      } else {
+        chipRoute.classList.add('hidden');
+        document.getElementById('btnFilterRoute').classList.remove('text-sky-400', 'bg-slate-800');
+      }
+
+      // Airline Chip & Button
+      if (isAirlineFiltered) {
+        chipAirline.classList.remove('hidden');
+        document.getElementById('chipAirlineVal').innerText = `${state.selectedAirlines.length}社選択中`;
+        document.getElementById('btnFilterAirline').classList.add('text-sky-400', 'bg-slate-800');
+      } else {
+        chipAirline.classList.add('hidden');
+        document.getElementById('btnFilterAirline').classList.remove('text-sky-400', 'bg-slate-800');
+      }
+
+      if (!isStatusFiltered && !isRouteFiltered && !isAirlineFiltered) {
+        noFilter.classList.remove('hidden');
+      } else {
+        noFilter.classList.add('hidden');
+      }
+    }
+
+    // Called when route/airline checkboxes or search input change
+    function applyAllFilters() {
+      state.selectedRoutes = Array.from(document.querySelectorAll('.routeFilterCheck:checked')).map(cb => cb.value);
+      state.selectedAirlines = Array.from(document.querySelectorAll('.airlineFilterCheck:checked')).map(cb => cb.value);
+      renderDashboard();
+    }
+
+    function clearRouteFilter() {
+      document.querySelectorAll('.routeFilterCheck').forEach(cb => cb.checked = true);
+      applyAllFilters();
+    }
+
+    function clearAirlineFilter() {
+      document.querySelectorAll('.airlineFilterCheck').forEach(cb => cb.checked = true);
+      applyAllFilters();
+    }
+
+    function resetAllFilters() {
+      state.status = 'all';
+      state.selectedRoutes = ['HND-CDG', 'NRT-LAX', 'FUK-TPE', 'KIX-BKK'];
+      state.selectedAirlines = ['AF', 'ANA', 'JAL', 'BR'];
+      document.querySelectorAll('.routeFilterCheck, .airlineFilterCheck').forEach(cb => cb.checked = true);
+      if (document.getElementById('quickSearchInput')) document.getElementById('quickSearchInput').value = '';
+      renderDashboard();
+    }
+
+    // ==========================================
+    // Filter Popover Controls
+    // ==========================================
+    function toggleFilterMenu(e, menuId) {
+      e.stopPropagation();
+      const menu = document.getElementById(menuId);
+      const isHidden = menu.classList.contains('hidden');
+      closeAllFilterMenus();
+      if (isHidden) {
+        menu.classList.remove('hidden');
+      }
+    }
+
+    function closeAllFilterMenus() {
+      ['statusDropdown', 'routeDropdown', 'airlineDropdown'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#statusDropdown') && !e.target.closest('#routeDropdown') && !e.target.closest('#airlineDropdown')) {
+        closeAllFilterMenus();
+      }
+    });
+
+    // ==========================================
+    // Sort Controls
+    // ==========================================
+    function toggleSortPrice() {
+      state.sortPriceAsc = !state.sortPriceAsc;
+      const tbody = document.getElementById('tableBody');
+      const rows = Array.from(tbody.querySelectorAll('.tableRow'));
+      rows.sort((a, b) => {
+        const pA = parseInt(a.getAttribute('data-price')) || 0;
+        const pB = parseInt(b.getAttribute('data-price')) || 0;
+        return state.sortPriceAsc ? pA - pB : pB - pA;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+      showToast(`価格を${state.sortPriceAsc ? '安い順 (昇順)' : '高い順 (降順)'}に並べ替えました`, 'info');
+    }
+
+    function toggleSortDate() {
+      showToast('最新取得日時順に並べ替えました', 'info');
+    }
+
+    // ==========================================
+    // Toast Notification System
+    // ==========================================
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bgColors = {
+        success: 'bg-emerald-950 border-emerald-800 text-emerald-200',
+        error: 'bg-rose-950 border-rose-800 text-rose-200',
+        info: 'bg-slate-900 border-slate-700 text-slate-200'
+      };
+      const icons = { success: 'check-circle', error: 'alert-circle', info: 'info' };
+      toast.className = `flex items-center space-x-2 px-4 py-3 rounded-xl border shadow-xl text-xs pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0 ${bgColors[type] || bgColors.info}`;
+      toast.innerHTML = `<i data-lucide="${icons[type] || 'info'}" class="w-4 h-4"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons({ root: toast });
+
+      setTimeout(() => { toast.classList.remove('translate-y-2', 'opacity-0'); }, 10);
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // ==========================================
+    // Chart.js Setup
+    // ==========================================
+    let chartInstance = null;
+    function initChart() {
+      const ctx = document.getElementById('priceChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['8/01', '8/05', '8/10', '8/15', '8/20', '8/25', '今日'],
+          datasets: [
+            {
+              label: 'Google Flights',
+              data: [175000, 168000, 169000, 162000, 155000, 153000, 148200],
+              borderColor: '#34d399',
+              backgroundColor: 'rgba(52, 211, 153, 0.05)',
+              tension: 0.2,
+              fill: true
+            },
+            {
+              label: 'Skyscanner',
+              data: [178000, 172000, 165000, 163000, 158000, 154000, 152400],
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.05)',
+              tension: 0.2,
+              fill: true
+            },
+            {
+              label: '目標価格',
+              data: [160000, 160000, 160000, 160000, 160000, 160000, 160000],
+              borderColor: '#f43f5e',
+              borderDash: [4, 4],
+              pointRadius: 0,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', callback: (v) => '¥' + v.toLocaleString() } }
+          }
+        }
+      });
+    }
+
+    // ==========================================
+    // Modal Controls
+    // ==========================================
+    function openDetailModal(route) { document.getElementById('detailModal').classList.remove('hidden'); setTimeout(initChart, 50); }
+    function closeDetailModal() { document.getElementById('detailModal').classList.add('hidden'); }
+    function openNewTaskModal() { document.getElementById('newTaskModal').classList.remove('hidden'); }
+    function closeNewTaskModal() { document.getElementById('newTaskModal').classList.add('hidden'); }
+    function openEditModal(route) { document.getElementById('editModal').classList.remove('hidden'); }
+    function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); }
+    function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); }
+    function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
+
+    let currentEditingNoteRoute = '';
+    function openQuickNoteModal(routeId, currentNote) {
+      currentEditingNoteRoute = routeId;
+      document.getElementById('quickNoteRouteTitle').innerText = routeId;
+      document.getElementById('quickNoteText').value = currentNote || '';
+      document.getElementById('quickNoteModal').classList.remove('hidden');
+    }
+    function closeQuickNoteModal() {
+      document.getElementById('quickNoteModal').classList.add('hidden');
+    }
+    function saveQuickNote() {
+      const note = document.getElementById('quickNoteText').value;
+      closeQuickNoteModal();
+      showToast('タスクメモを更新・保存しました', 'success');
+    }
+
+    let currentDeletingRoute = '';
+    function openDeleteModal(routeId, routeName) {
+      currentDeletingRoute = routeId;
+      document.getElementById('deleteTaskRoute').innerText = routeName;
+      document.getElementById('deleteModal').classList.remove('hidden');
+    }
+    function closeDeleteModal() { document.getElementById('deleteModal').classList.add('hidden'); }
+    function confirmDelete() {
+      closeDeleteModal();
+      showToast('監視タスクを削除しました', 'info');
+    }
+
+    function triggerImmediateRun(route) {
+      showToast('巡回ジョブを開始しました（Google & Skyscanner）', 'info');
+      setTimeout(() => {
+        showToast('巡回完了: 最安値 ¥148,200 (前回比 -¥13,800)', 'success');
+      }, 1500);
+    }
+
+    function setTripType(type) {
+      const btnRound = document.getElementById('btnRoundTrip');
+      const btnOne = document.getElementById('btnOneWay');
+      const inboundCont = document.getElementById('inboundDateContainer');
+      if (type === 'OneWay') {
+        btnOne.className = 'py-1.5 text-center rounded-md font-medium bg-sky-600 text-white';
+        btnRound.className = 'py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white';
+        inboundCont.classList.add('opacity-30', 'pointer-events-none');
+      } else {
+        btnRound.className = 'py-1.5 text-center rounded-md font-medium bg-sky-600 text-white';
+        btnOne.className = 'py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white';
+        inboundCont.classList.remove('opacity-30', 'pointer-events-none');
+      }
+    }
+
+    function insertTemplate(type) {
+      const textarea = document.getElementById('aiInput');
+      if (type === 'markdown') {
+        textarea.value = `【旅行計画】
+- 出発地: 東京 (羽田 / HND)
+- 目的地: パリ (シャルル・ド・ゴール / CDG)
+- 往路出発日: 2026-05-01
+- 復路出発日: 2026-05-08
+- 許容乗継回数: 1回乗継まで
+- 目標予算: 160000 円以下
+- 優先航空会社: ANA, シンガポール航空, エールフランス`;
+      } else if (type === 'yaml') {
+        textarea.value = `flight_request:
+  origin: "NRT"
+  destination: "LAX"
+  trip_type: "RoundTrip"
+  dates:
+    departure: "2026-08-10"
+    return: "2026-08-18"
+  max_stops: "DirectOnly"
+  target_price_jpy: 180000
+  preferred_airlines: ["ANA", "JAL"]`;
+      } else {
+        textarea.value = `8月のお盆休みに成田発ロサンゼルス往復で探して。直行便希望で、ANAかJAL、予算は1人18万円以内でアラート通知してほしい。`;
+      }
+      showToast('テンプレートを入力欄に挿入しました', 'info');
+    }
+
+    function parseWithAI() {
+      const text = document.getElementById('aiInput').value;
+      if (!text) { showToast('テキストを入力してください', 'error'); return; }
+      document.getElementById('formOrigin').value = 'NRT - 東京(成田)';
+      document.getElementById('formDestination').value = 'LAX - ロサンゼルス';
+      document.getElementById('formOutboundDate').value = '2026-08-10';
+      document.getElementById('formInboundDate').value = '2026-08-18';
+      document.getElementById('formMaxStops').value = 'DirectOnly';
+      document.getElementById('formTargetPrice').value = '180000';
+      document.getElementById('formInterval').value = 'default';
+      openNewTaskModal();
+      showToast('AIが構造化テキストを解析し、フォームに反映しました', 'success');
+    }
+
+    function handleCreateTask(e) {
+      e.preventDefault();
+      closeNewTaskModal();
+      showToast('新規監視タスクを登録しました。初回の巡回を開始します', 'success');
+    }
+
+    function handleUpdateTask(e) {
+      e.preventDefault();
+      closeEditModal();
+      showToast('タスク設定を更新しました', 'success');
+    }
+
+    function saveSettings() {
+      closeSettingsModal();
+      showToast('システム設定（デフォルト巡回間隔・Webhook等）を保存しました', 'success');
+    }
+
+    // Initial render
+    renderDashboard();
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "clojure.cljr": {
+      "version": "0.1.0-beta1",
+      "commands": [
+        "cljr"
+      ],
+      "rollForward": false
+    },
+    "clojure.main": {
+      "version": "1.12.2",
+      "commands": [
+        "Clojure.Main"
+      ],
+      "rollForward": false
+    }
+  }
+}
