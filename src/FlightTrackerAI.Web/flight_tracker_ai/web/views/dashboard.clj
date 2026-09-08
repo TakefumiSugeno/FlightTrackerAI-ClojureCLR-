@@ -182,10 +182,20 @@
          (str (if is-round "往復" "片道") " (" (:check-interval-hours task-item) "h毎巡回)")]]
        [:div {:class "flex items-center space-x-1 text-slate-400"}
         [:button {:type "button"
+                  :onclick (str "toggleTaskStatus('" (:id task-item) "')")
+                  :title (if (= status :paused) "巡回再開" "一時停止")
+                  :class (str "p-1.5 hover:bg-slate-800 rounded transition " (if (= status :paused) "text-amber-400 hover:text-amber-300" "text-slate-400 hover:text-amber-400"))}
+         [:i {:class (if (= status :paused) "fa-solid fa-play text-xs" "fa-solid fa-pause text-xs")}]]
+        [:button {:type "button"
                   :onclick (str "triggerImmediateRun('" (:id task-item) "')")
-                  :title (if (= status :error) "手動再試行" "今すぐ巡回実行")
+                  :title (if (= status :error) "手動再試行" "即時巡回 (ヘッドレス)")
                   :class (str "p-1.5 hover:bg-slate-800 rounded transition " (if (= status :error) "text-rose-400 hover:text-rose-300" "hover:text-sky-400"))}
-         [:i {:class "fa-solid fa-rotate text-xs"}]]
+         [:i {:class "fa-solid fa-arrows-rotate text-xs"}]]
+        [:button {:type "button"
+                  :onclick (str "triggerImmediateRunWithBrowser('" (:id task-item) "')")
+                  :title "ブラウザを開いて巡回 (ユーザー手動支援)"
+                  :class "p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-800 rounded transition"}
+         [:i {:class "fa-solid fa-window-restore text-sky-400 text-xs"}]]
         [:button {:type "button"
                   :onclick (str "openEditModal('" (:id task-item) "')")
                   :title "タスク設定変更"
@@ -383,7 +393,13 @@
             [:div {:class "text-[10px] text-slate-400 mt-0.5"} time-part]]
            ;; Actions
            [:td {:class "px-3 py-2.5 text-center whitespace-nowrap space-x-1"}
-            [:button {:type "button" :onclick (str "openDetailModal('" (:id t) "')") :class "text-sky-400 hover:underline text-xs"} "詳細"]
+            [:button {:type "button" :onclick (str "toggleTaskStatus('" (:id t) "')") :title (if (= status :paused) "再開" "停止") :class (if (= status :paused) "text-amber-400 hover:text-amber-300 text-xs p-1" "text-slate-400 hover:text-amber-400 text-xs p-1")}
+             [:i {:class (if (= status :paused) "fa-solid fa-play" "fa-solid fa-pause")}]]
+            [:button {:type "button" :onclick (str "triggerImmediateRun('" (:id t) "')") :title "即時巡回 (ヘッドレス)" :class "text-slate-400 hover:text-sky-400 text-xs p-1"}
+             [:i {:class "fa-solid fa-arrows-rotate"}]]
+            [:button {:type "button" :onclick (str "triggerImmediateRunWithBrowser('" (:id t) "')") :title "ブラウザ巡回 (手動支援)" :class "text-sky-400 hover:text-sky-300 text-xs p-1"}
+             [:i {:class "fa-solid fa-window-restore"}]]
+            [:button {:type "button" :onclick (str "openDetailModal('" (:id t) "')") :class "text-sky-400 hover:underline text-xs ml-1"} "詳細"]
             [:button {:type "button" :onclick (str "openEditModal('" (:id t) "')") :class "text-slate-400 hover:underline text-xs ml-1"} "編集"]
             [:button {:type "button" :onclick (str "openDeleteModal('" (:id t) "', '" origin-str " ➔ " dest-str "')") :class "text-rose-400 hover:underline text-xs ml-1"} "削除"]]]))]]]])
 
@@ -632,6 +648,38 @@
          })
          .catch(err => showToast('巡回エラー: ' + err.message, false));
      }
+
+      function toggleTaskStatus(taskId) {
+        showToast('ステータスを切り替えています...', true);
+        fetch('/api/tasks/' + taskId + '/toggle-status', { method: 'POST' })
+          .then(r => r.text())
+          .then(html => {
+            const dash = document.getElementById('dashboard-container');
+            if (dash) dash.outerHTML = html;
+            showToast('タスクステータスを更新しました', true);
+          })
+          .catch(err => showToast('更新失敗: ' + err.message, false));
+      }
+
+      function triggerImmediateRunWithBrowser(taskId) {
+        showToast('ブラウザを表示して巡回を開始します (手動支援モード)...', true);
+        fetch('/api/tasks/' + taskId + '/run?headless=false', { method: 'POST' })
+          .then(r => {
+            if (r.status === 409) {
+              showToast('他のタスクが巡回中です。完了までお待ちください。', false);
+              return null;
+            }
+            return r.text();
+          })
+          .then(html => {
+            if (html) {
+              const dash = document.getElementById('dashboard-container');
+              if (dash) dash.outerHTML = html;
+              showToast('有頭ブラウザ巡回が完了しました', true);
+            }
+          })
+          .catch(err => showToast('巡回エラー: ' + err.message, false));
+      }
 
      function simulateResolveChallenge() {
        const banner = document.getElementById('manualChallengeBanner');

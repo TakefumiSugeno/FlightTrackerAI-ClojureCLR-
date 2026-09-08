@@ -10,3 +10,12 @@
       (is (str/includes? res "FlightTrackerAI"))
       (is (str/includes? res "tailwindcss"))
       (is (str/includes? res "コンテンツ")))))
+
+(deftest test-base-layout-header-actions
+  (testing "base-layout renders header with log viewer and settings buttons"
+    (let [res (layout/base-layout "テスト" [:div "テスト"])]
+      (is (str/includes? res "/api/logs/modal"))
+      (is (str/includes? res "ログ確認"))
+      (is (str/includes? res "/api/settings/modal"))
+      (is (str/includes? res "insertTemplate"))
+      (is (str/includes? res "parseWithAI")))))

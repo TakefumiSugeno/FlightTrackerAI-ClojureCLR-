@@ -118,3 +118,68 @@
         (finally
           (.Release scraper-common/scraper-lock))))))
 
+(deftest test-toggle-task-status
+  (testing "POST /api/tasks/:id/toggle-status toggles between active and paused"
+    (let [conn-str (create-test-db)
+          task (insert-test-task! conn-str "トグルテスト")
+          task-id (:id task)
+          res1 (api/handle-api-request conn-str "POST" (str "/api/tasks/" task-id "/toggle-status") nil)
+          t1 (task-repo/get-task-by-id conn-str task-id)
+          res2 (api/handle-api-request conn-str "POST" (str "/api/tasks/" task-id "/toggle-status") nil)
+          t2 (task-repo/get-task-by-id conn-str task-id)]
+      (is (= 200 (:status res1)))
+      (is (= :paused (:status t1)))
+      (is (= 200 (:status res2)))
+      (is (= :active (:status t2))))))
+
+(deftest test-logs-endpoints
+  (testing "GET /api/logs/modal and /api/logs/text return logs"
+    (let [conn-str (create-test-db)
+          res-modal (api/handle-api-request conn-str "GET" "/api/logs/modal" nil)
+          res-text (api/handle-api-request conn-str "GET" "/api/logs/text" nil)]
+      (is (= 200 (:status res-modal)))
+      (is (str/includes? (:body res-modal) "システム実行ログ"))
+      (is (= 200 (:status res-text)))
+      (is (= "text/plain; charset=utf-8" (:content-type res-text))))))
+
+(deftest test-ai-parse-endpoint
+  (testing "POST /api/ai/parse returns JSON with parsed or fallback fields"
+    (let [conn-str (create-test-db)
+          res (api/handle-api-request conn-str "POST" "/api/ai/parse" "{\"prompt\":\"東京からパリ往復\"}")]
+      (is (= 200 (:status res)))
+      (is (= "application/json; charset=utf-8" (:content-type res)))
+      (is (str/includes? (:body res) "TripType")))
+    (let [conn-str (create-test-db)
+          err-res (api/handle-api-request conn-str "POST" "/api/ai/parse" "{\"prompt\":\"\"}")]
+      (is (= 400 (:status err-res))))))
+
+(deftest test-create-task-standalone
+  (testing "POST /api/tasks/standalone creates task and returns redirect script"
+    (let [conn-str (create-test-db)
+          form-body "title=スタンドアロン&origin=HND&destination=SIN&tripType=RoundTrip&outboundDate=2026-08-10&inboundDate=2026-08-17&targetPriceJpy=80000&maxStops=DirectOnly"
+          res (api/handle-api-request conn-str "POST" "/api/tasks/standalone" form-body)
+          tasks (task-repo/get-all-tasks conn-str)]
+      (is (= 200 (:status res)))
+      (is (str/includes? (:body res) "window.location.href='/'"))
+      (is (= 1 (count tasks)))
+      (is (= "スタンドアロン" (:title (first tasks))))
+      (is (= :direct-only (:max-stops (first tasks)))))))
+
+(deftest test-route-aliases
+  (testing "Route aliases /modal, /notes-modal, /detail-modal, and /view work correctly"
+    (let [conn-str (create-test-db)
+          task (insert-test-task! conn-str "エイリアステスト")
+          task-id (:id task)
+          res-modal (api/handle-api-request conn-str "GET" (str "/api/tasks/" task-id "/modal") nil)
+          res-notes (api/handle-api-request conn-str "GET" (str "/api/tasks/" task-id "/notes-modal") nil)
+          res-detail (api/handle-api-request conn-str "GET" (str "/api/tasks/" task-id "/detail-modal") nil)
+          res-view (api/handle-api-request conn-str "GET" "/api/tasks/view" nil)]
+      (is (= 200 (:status res-modal)))
+      (is (str/includes? (:body res-modal) "エイリアステスト"))
+      (is (= 200 (:status res-notes)))
+      (is (str/includes? (:body res-notes) "タスクのメモ・要望編集"))
+      (is (= 200 (:status res-detail)))
+      (is (str/includes? (:body res-detail) "エイリアステスト"))
+      (is (= 200 (:status res-view)))
+      (is (str/includes? (:body res-view) "エイリアステスト")))))
+

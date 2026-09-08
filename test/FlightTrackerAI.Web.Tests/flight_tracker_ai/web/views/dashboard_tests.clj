@@ -46,6 +46,9 @@
       (is (str/includes? html "CDG"))
       (is (str/includes? html "¥148,000"))
       (is (str/includes? html "🎯 目標達成"))
+      (is (str/includes? html "toggleTaskStatus"))
+      (is (str/includes? html "triggerImmediateRunWithBrowser"))
+      (is (str/includes? html "fa-window-restore"))
       (is (str/includes? html "羽田直行希望")))))
 
 (deftest test-render-manual-challenge-banner

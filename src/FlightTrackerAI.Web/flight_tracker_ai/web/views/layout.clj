@@ -44,6 +44,14 @@
            [:span {:class "relative inline-flex rounded-full h-2 w-2 bg-emerald-500"}]]
           [:span {:class "text-slate-300"} "巡回ワーカー: 稼働中 (1分間隔)"]]
 
+         ;; ログ確認ボタン
+         [:button {:class "p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition border border-slate-700 flex items-center space-x-1.5 text-xs font-medium"
+                   :title "システム実行ログ確認 (AI共有用)"
+                   :hx-get "/api/logs/modal"
+                   :hx-target "#modal-container"}
+          [:i {:class "fa-solid fa-terminal text-sm text-sky-400"}]
+          [:span {:class "hidden sm:inline"} "ログ確認"]]
+
          [:button {:class "p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition text-sm"
                    :title "全体設定"
                    :hx-get "/api/settings/modal"
@@ -57,35 +65,155 @@
           [:span {:class "hidden sm:inline"} "新規タスク登録"]]]]]
 
       ;; Main Container
-      [:main {:class "flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full"}
+      [:main {:class "flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6"}
        body-content]
 
       ;; Footer
-      [:footer {:class "border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-500"}
-       [:p "FlightTrackerAI • Specification-Driven Development on ClojureCLR (.NET 10)"]]
+      [:footer {:class "border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-500 mt-auto"}
+       [:p "FlightTrackerAI • Specification-Driven Architecture on ClojureCLR (.NET 10)"]]
 
       ;; Modal Container
       [:div {:id "modal-container"}]
 
       ;; Client-Side Scripts
       [:script (h/raw "
-        function showToast(message, isSuccess) {
+        function showToast(message, isSuccess = true) {
           const container = document.getElementById('toastContainer');
           if (!container) return;
           const toast = document.createElement('div');
-          toast.className = 'pointer-events-auto flex items-center space-x-2 px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium border transition-all duration-300 transform translate-y-2 opacity-0 ' +
-            (isSuccess ? 'bg-emerald-950 border-emerald-800 text-emerald-200' : 'bg-rose-950 border-rose-800 text-rose-200');
+          toast.className = `px-4 py-3 rounded-xl shadow-2xl text-xs font-medium flex items-center gap-2 pointer-events-auto transition duration-300 border ${isSuccess ? 'bg-slate-900/95 text-emerald-300 border-emerald-500/30' : 'bg-slate-900/95 text-rose-300 border-rose-500/30'}`;
           toast.innerHTML = `<i class=\"fa-solid ${isSuccess ? 'fa-circle-check text-emerald-400' : 'fa-circle-exclamation text-rose-400'}\"></i><span>${message}</span>`;
           container.appendChild(toast);
-          setTimeout(() => { toast.classList.remove('translate-y-2', 'opacity-0'); }, 10);
-          setTimeout(() => {
-            toast.classList.add('opacity-0', 'translate-y-2');
-            setTimeout(() => toast.remove(), 300);
-          }, 4000);
+          setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 5000);
         }
 
         function closeCurrentModal() {
+          const active = document.getElementById('active-modal');
+          if (active) active.remove();
+          const qn = document.getElementById('quickNoteModal');
+          if (qn) qn.remove();
+          const tm = document.getElementById('timelineModal');
+          if (tm) tm.remove();
           const container = document.getElementById('modal-container');
           if (container) container.innerHTML = '';
+        }
+
+        function insertTemplate(type) {
+          const textarea = document.getElementById('aiInput');
+          if (!textarea) return;
+          if (type === 'markdown') {
+            textarea.value = '- 出発地: 東京 (羽田 / HND)\\n- 目的地: パリ (CDG)\\n- 往路日: 2026/05/01, 復路日: 2026/05/08\\n- 乗継: 直行便のみ\\n- 目標予算: 160,000 円以下\\n- 希望航空会社: ANA, エールフランス';
+          } else if (type === 'yaml') {
+            textarea.value = 'origin: HND\\ndestination: SIN\\ntrip_type: RoundTrip\\noutbound_date: 2026-08-10\\ninbound_date: 2026-08-17\\nmax_stops: 0\\ntarget_price: 90000\\nnotes: お盆休みシンガポール';
+          } else if (type === 'natural') {
+            textarea.value = '8月のお盆休みに羽田からシンガポールに往復で行きたいです。予算は9万円以内で直行便を希望します。';
+          }
+          textarea.focus();
+        }
+
+        function parseWithAI() {
+          const textarea = document.getElementById('aiInput');
+          const prompt = textarea ? textarea.value.trim() : '';
+          if (!prompt) {
+            showToast('AI解析するテキストを入力してください。', false);
+            return;
+          }
+          const newTab = window.open('about:blank', '_blank');
+          if (newTab) {
+            newTab.document.write(`
+              <!DOCTYPE html>
+              <html lang=\"ja\" class=\"dark\">
+              <head>
+                <meta charset=\"UTF-8\">
+                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+                <title>AI解析中... • FlightTrackerAI</title>
+                <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />
+                <script src=\"https://cdn.tailwindcss.com\"><\\/script>
+                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css\">
+              </head>
+              <body class=\"bg-slate-950 text-slate-100 flex items-center justify-center min-h-screen font-sans p-4\">
+                <div class=\"text-center space-y-5 max-w-md p-8 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-sm\">
+                  <div class=\"relative w-20 h-20 mx-auto flex items-center justify-center\">
+                    <div class=\"absolute inset-0 rounded-full border-4 border-sky-500/20 border-t-sky-400 animate-spin\"></div>
+                    <i class=\"fa-solid fa-plane text-xl text-sky-400 animate-pulse\"></i>
+                  </div>
+                  <div class=\"space-y-2\">
+                    <h3 class=\"font-bold text-white text-base\">AI 解析を実行中...</h3>
+                    <p class=\"text-xs text-slate-400 leading-relaxed\">自然言語プロンプトからフライト条件を抽出しています。<br>解析完了後、自動的に登録画面へ遷移します。</p>
+                  </div>
+                  <div class=\"inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-[11px] text-slate-400 font-mono\">
+                    <span class=\"w-2 h-2 rounded-full bg-sky-400 animate-ping\"></span>
+                    <span>OpenRouter LLM 解析処理中</span>
+                  </div>
+                </div>
+              </body>
+              </html>
+            `);
+            newTab.document.close();
+          }
+          showToast('AI解析を実行中...（新規タブで準備中）', true);
+          fetch('/api/ai/parse', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ prompt: prompt })
+          })
+          .then(async r => {
+            if (!r.ok) {
+              let errText = await r.text();
+              try {
+                const errObj = JSON.parse(errText);
+                if (errObj && errObj.error) errText = errObj.error;
+              } catch(e) {}
+              throw new Error(errText || `HTTP ${r.status}`);
+            }
+            return r.json();
+          })
+          .then(data => {
+            const origin = data.origin || data.Origin || '';
+            const destination = data.destination || data.Destination || '';
+            const outboundDate = data.outboundDate || data.OutboundDate || '';
+            const inboundDate = data.inboundDate || data.InboundDate || '';
+            const tripType = data.tripType || data.TripType || 'RoundTrip';
+            const maxStops = data.maxStops || data.MaxStops || 'Any';
+            const maxPrice = data.maxPriceJpy || data.MaxPriceJpy || '';
+            const notes = data.notes || data.Notes || '';
+
+            const params = new URLSearchParams();
+            if (origin) params.append('origin', origin);
+            if (destination) params.append('destination', destination);
+            if (outboundDate) params.append('outboundDate', outboundDate);
+            if (inboundDate) params.append('inboundDate', inboundDate);
+            if (tripType) params.append('tripType', tripType);
+            if (maxStops) params.append('maxStops', maxStops);
+            if (maxPrice) params.append('maxPriceJpy', maxPrice);
+            if (notes) params.append('notes', notes);
+
+            const newTabUrl = '/tasks/new?' + params.toString();
+            if (newTab && !newTab.closed) {
+              newTab.location.href = newTabUrl;
+            } else {
+              window.open(newTabUrl, '_blank');
+            }
+            showToast('AI解析完了: 別画面（新規タブ）に登録画面を開きました！', true);
+          })
+          .catch(err => {
+            if (newTab && !newTab.closed) {
+              const sanitizedMsg = (err.message || 'エラーが発生しました').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              newTab.document.body.innerHTML = `
+                <div class=\"text-center space-y-4 max-w-md p-8 bg-slate-900/90 border border-rose-500/30 rounded-2xl shadow-2xl\">
+                  <div class=\"w-16 h-16 mx-auto rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-2xl\">
+                    <i class=\"fa-solid fa-triangle-exclamation\"></i>
+                  </div>
+                  <div class=\"space-y-1\">
+                    <h3 class=\"font-bold text-white text-base\">AI解析に失敗しました</h3>
+                    <p class=\"text-xs text-rose-300 leading-relaxed\">${sanitizedMsg}</p>
+                  </div>
+                  <p class=\"text-[11px] text-slate-400\">元の画面でプロンプト内容をご確認・修正の上、再試行してください。</p>
+                  <button onclick=\"window.close()\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg font-medium transition\">このタブを閉じる</button>
+                </div>
+              `;
+            }
+            showToast(err.message, false);
+          });
         }
       ")]]]))

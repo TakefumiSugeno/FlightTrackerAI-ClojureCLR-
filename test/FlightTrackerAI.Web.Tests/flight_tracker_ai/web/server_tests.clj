@@ -25,3 +25,20 @@
         (finally
           (.Stop listener)
           (.Close listener))))))
+
+(deftest test-server-serves-new-task-page
+  (testing "HttpListener server serves standalone new task page on /tasks/new"
+    (let [conn-str (create-test-db)
+          port "58922"
+          listener (server/start-server conn-str port)
+          client (HttpClient.)]
+      (try
+        (let [resp (.GetResult (.GetAwaiter (.GetAsync client (str "http://localhost:" port "/tasks/new?origin=HND&destination=SIN"))))
+              body (.GetResult (.GetAwaiter (.ReadAsStringAsync (.Content resp))))]
+          (is (= 200 (int (.StatusCode resp))))
+          (is (str/includes? body "新規フライト監視タスク登録"))
+          (is (str/includes? body "HND"))
+          (is (str/includes? body "SIN")))
+        (finally
+          (.Stop listener)
+          (.Close listener))))))

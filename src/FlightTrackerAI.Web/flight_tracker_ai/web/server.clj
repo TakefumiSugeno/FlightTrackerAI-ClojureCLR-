@@ -4,12 +4,14 @@
   (:require [flight-tracker-ai.web.controllers.api-controller :as api]
             [flight-tracker-ai.web.views.layout :as layout]
             [flight-tracker-ai.web.views.dashboard :as dash]
+            [flight-tracker-ai.web.views.modals :as modals]
             [flight-tracker-ai.infrastructure.database :as db]
             [flight-tracker-ai.infrastructure.task-repository :as task-repo]
             [flight-tracker-ai.infrastructure.scraping-worker :as worker]
             [flight-tracker-ai.infrastructure.app-logger :as logger]
             [clojure.string :as str])
-  (:import [System.Net HttpListener HttpListenerContext]
+  (:import [System Uri]
+           [System.Net HttpListener HttpListenerContext]
            [System.IO File StreamReader]
            [System.Text Encoding]
            [System.Threading Thread ThreadPool WaitCallback ThreadStart]))
@@ -41,9 +43,17 @@
       (cond
         ;; Dashboard HTML
         (and (= method "GET") (or (= raw-url "/") (= raw-url "/index.html")))
-        (let [tasks (task-repo/get-all-tasks connection-string)
-              content (dash/render-dashboard-content tasks)
-              full-html (layout/base-layout "ダッシュボード" content)]
+        (let [tasks (task-repo/get-all-tasks connection-string)]
+          (let [content (dash/render-dashboard-content tasks)
+                full-html (layout/base-layout "ダッシュボード" content)]
+            (write-response resp 200 "text/html; charset=utf-8" full-html)))
+
+        ;; Standalone New Task Page
+        (and (= method "GET") (.StartsWith raw-url "/tasks/new"))
+        (let [uri (Uri. (str "http://localhost" raw-url))
+              query (api/parse-query-string (.Query uri))
+              content (modals/render-standalone-new-task-page query)
+              full-html (layout/base-layout "新規タスク登録" content)]
           (write-response resp 200 "text/html; charset=utf-8" full-html))
 
         ;; Favicon

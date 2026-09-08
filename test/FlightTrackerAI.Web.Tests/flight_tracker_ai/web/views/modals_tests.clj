@@ -82,4 +82,37 @@
       (is (str/includes? html "パリ旅行"))
       (is (str/includes? html (str "/api/tasks/" task-id "/notes"))))))
 
+(deftest test-render-logs-modal
+  (testing "render-logs-modal renders log lines and controls"
+    (let [logs ["[2026-09-08 JST] [INFO] [Worker] 巡回開始"
+                "[2026-09-08 JST] [SUCCESS] [Worker] 巡回成功"]
+          html (modals/render-logs-modal logs "logs/app.log")]
+      (is (str/includes? html "システム実行ログ"))
+      (is (str/includes? html "最新 2 行を表示中"))
+      (is (str/includes? html "logContentPre"))
+      (is (str/includes? html "logs/app.log"))
+      (is (str/includes? html "巡回開始"))
+      (is (str/includes? html "/api/logs/modal")))))
+
+(deftest test-render-standalone-new-task-page
+  (testing "render-standalone-new-task-page renders complete registration page"
+    (let [params {:origin "HND"
+                  :destination "SIN"
+                  :outboundDate "2026-08-10"
+                  :inboundDate "2026-08-17"
+                  :tripType "RoundTrip"
+                  :maxStops "DirectOnly"
+                  :maxPriceJpy "90000"
+                  :notes "お盆シンガポール"}
+          html (modals/render-standalone-new-task-page params)]
+      (is (str/includes? (str html) "新規フライト監視タスク登録"))
+      (is (str/includes? (str html) "HND"))
+      (is (str/includes? (str html) "SIN"))
+      (is (str/includes? (str html) "2026-08-10"))
+      (is (str/includes? (str html) "2026-08-17"))
+      (is (str/includes? (str html) "90000"))
+      (is (str/includes? (str html) "お盆シンガポール"))
+      (is (str/includes? (str html) "/api/tasks/standalone")))))
+
+
 

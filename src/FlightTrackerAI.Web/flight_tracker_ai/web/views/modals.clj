@@ -362,3 +362,210 @@
                    :onclick "closeCurrentModal()"
                    :class "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg font-medium"}
           "閉じる"]]]])))
+
+(defn render-logs-modal [logs log-file-path]
+  (let [log-content (str/join "\n" (or logs []))]
+    (h/render-html
+      (modal-backdrop
+        "システム実行ログ (Debug & Activity Logs)"
+        [:div {:class "space-y-4 text-xs"}
+         [:div {:class "flex items-center justify-between text-slate-400"}
+          [:span {:class "font-mono text-[11px] truncate max-w-xs"} (str "ログ: " (or log-file-path "app.log"))]
+          [:span {:class "text-[11px] font-medium text-sky-400"} (str "最新 " (count (or logs [])) " 行を表示中")]]
+
+         [:div {:class "relative"}
+          [:pre {:id "logContentPre"
+                 :class "w-full h-80 bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-slate-200 overflow-y-auto leading-relaxed whitespace-pre-wrap select-all"}
+           log-content]]
+
+         [:div {:class "flex items-center justify-between pt-2 border-t border-slate-800"}
+          [:div {:class "flex items-center space-x-2"}
+           [:button {:type "button"
+                     :class "px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition"
+                     :hx-get "/api/logs/modal"
+                     :hx-target "#modal-container"}
+            [:i {:class "fa-solid fa-rotate-right text-xs"}]
+            "再読込"]
+           [:button {:type "button"
+                     :class "px-3 py-1.5 bg-sky-600/30 hover:bg-sky-600 text-sky-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-sky-500/40"
+                     :onclick "navigator.clipboard.writeText(document.getElementById('logContentPre').innerText).then(() => showToast('ログをクリップボードにコピーしました（AI共有用）', true));"}
+            [:i {:class "fa-regular fa-copy text-xs"}]
+            "ログをコピー (AI共有用)"]]
+          [:button {:type "button"
+                    :class "px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+                    :onclick "closeCurrentModal()"}
+           "閉じる"]]]))))
+
+(defn render-standalone-new-task-page [params]
+  (let [origin (or (:origin params) "")
+        destination (or (:destination params) "")
+        outbound-date (or (:outboundDate params) "")
+        inbound-date (or (:inboundDate params) "")
+        trip-type (or (:tripType params) "RoundTrip")
+        max-stops (or (:maxStops params) "Any")
+        max-price-jpy (or (:maxPriceJpy params) "")
+        notes (or (:notes params) "")
+        is-one-way (= trip-type "OneWay")]
+    [:div {:class "max-w-2xl mx-auto py-8 px-4"}
+     [:div {:class "bg-slate-950 rounded-2xl shadow-2xl border border-slate-800 p-6 md:p-8 space-y-6 text-slate-100"}
+      [:div {:class "flex items-center justify-between border-b border-slate-800 pb-4"}
+       [:div {:class "flex items-center gap-3"}
+        [:span {:class "w-10 h-10 rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400"}
+         [:i {:class "fa-solid fa-plane-departure text-lg"}]]
+        [:div
+         [:h2 {:class "text-lg font-bold text-white"} "新規フライト監視タスク登録"]
+         [:p {:class "text-xs text-slate-400"} "AI解析によって抽出された条件をご確認・調整の上、登録してください。"]]]
+       [:a {:href "/"
+            :class "text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 transition flex items-center gap-1.5"}
+        [:i {:class "fa-solid fa-arrow-left text-[10px]"}]
+        "ダッシュボードへ戻る"]]
+
+      [:form {:action "/api/tasks/standalone"
+              :method "post"
+              :class "space-y-5 text-xs"}
+       ;; 旅行タイプ切り替えボタン
+       [:div
+        [:label {:class "block text-slate-400 font-medium mb-1"} "旅行タイプ"]
+        [:div {:class "grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800"}
+         [:button {:type "button"
+                   :id "btnRoundTrip"
+                   :class (if-not is-one-way "py-2 text-center rounded-md font-medium bg-sky-600 text-white transition" "py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
+                   :onclick "document.getElementById('formTripType').value='RoundTrip'; document.getElementById('btnRoundTrip').className='py-2 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnOneWay').className='py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='block';"}
+          "往復"]
+         [:button {:type "button"
+                   :id "btnOneWay"
+                   :class (if is-one-way "py-2 text-center rounded-md font-medium bg-sky-600 text-white transition" "py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
+                   :onclick "document.getElementById('formTripType').value='OneWay'; document.getElementById('btnOneWay').className='py-2 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnRoundTrip').className='py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='none';"}
+          "片道"]]
+        [:input {:type "hidden" :id "formTripType" :name "tripType" :value (if is-one-way "OneWay" "RoundTrip")}]]
+
+       ;; 空港選択
+       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1"} "出発地 (都市名またはIATA) *"]
+         [:input {:list "airportsList"
+                  :type "text"
+                  :name "origin"
+                  :required true
+                  :value origin
+                  :placeholder "HND - 東京(羽田)"
+                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1"} "目的地 (都市名またはIATA) *"]
+         [:input {:list "airportsList"
+                  :type "text"
+                  :name "destination"
+                  :required true
+                  :value destination
+                  :placeholder "CDG - パリ"
+                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
+
+       ;; 空港候補 Datalist
+       [:datalist {:id "airportsList"}
+        [:option {:value "HND - 東京(羽田)"}]
+        [:option {:value "NRT - 東京(成田)"}]
+        [:option {:value "KIX - 大阪(関西)"}]
+        [:option {:value "ITM - 大阪(伊丹)"}]
+        [:option {:value "FUK - 福岡"}]
+        [:option {:value "CTS - 札幌(新千歳)"}]
+        [:option {:value "MNL - マニラ(ニノイ・アキノ)"}]
+        [:option {:value "CDG - パリ(シャルル・ド・ゴール)"}]
+        [:option {:value "LHR - ロンドン(ヒースロー)"}]
+        [:option {:value "LAX - ロサンゼルス"}]
+        [:option {:value "SFO - サンフランシスコ"}]
+        [:option {:value "HNL - ホノルル"}]
+        [:option {:value "BKK - バンコク(スワンナプーム)"}]
+        [:option {:value "SIN - シンガポール(チャンギ)"}]
+        [:option {:value "TPE - 台北(桃園)"}]]
+
+       ;; 日程入力
+       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1 flex items-center gap-1.5"}
+          [:i {:class "fa-regular fa-calendar text-sky-400 text-xs"}]
+          "往路出発日 *"]
+         [:input {:type "date"
+                  :name "outboundDate"
+                  :required true
+                  :value outbound-date
+                  :class "w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
+        [:div {:id "inboundDateContainer"
+               :style (if is-one-way "display: none;" "")}
+         [:label {:class "block text-slate-400 font-medium mb-1 flex items-center gap-1.5"}
+          [:i {:class "fa-regular fa-calendar text-indigo-400 text-xs"}]
+          "復路出発日"]
+         [:input {:type "date"
+                  :name "inboundDate"
+                  :value inbound-date
+                  :class "w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
+
+       ;; 乗継 & 巡回間隔
+       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1"} "許容乗継回数 (Max Stops)"]
+         [:select {:name "maxStops"
+                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
+          [:option (merge {:value "Any"} (when (= max-stops "Any") {:selected true})) "乗継制限なし (最安重視・推奨)"]
+          [:option (merge {:value "OneStop"} (when (= max-stops "OneStop") {:selected true})) "1回乗継まで"]
+          [:option (merge {:value "DirectOnly"} (when (= max-stops "DirectOnly") {:selected true})) "直行便のみ (0回乗継)"]]]
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1"} "巡回間隔"]
+         [:select {:name "checkIntervalHours"
+                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
+          [:option {:value "12" :selected true} "全体設定に従う (現在 12h)"]
+          [:option {:value "3"} "3時間ごと"]
+          [:option {:value "6"} "6時間ごと"]
+          [:option {:value "12"} "12時間ごと"]
+          [:option {:value "24"} "24時間ごと"]]]]
+
+       ;; 目標価格 & タスク名
+       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1"} "目標アラート価格 (JPY)"]
+         [:input {:type "number"
+                  :name "targetPriceJpy"
+                  :value max-price-jpy
+                  :placeholder "例: 50000"
+                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
+        [:div
+         [:label {:class "block text-slate-400 font-medium mb-1"} "タスク名 (任意)"]
+         [:input {:type "text"
+                  :name "title"
+                  :value (str (if (str/blank? origin) "東京" origin) " ➔ " (if (str/blank? destination) "目的地" destination))
+                  :placeholder "例: 東京 ➔ マニラ 直行便旅行"
+                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
+
+       ;; メモ
+       [:div
+        [:label {:class "block text-slate-400 font-medium mb-1"} "構造化メモ / 要望・制約（任意）"]
+        [:textarea {:name "userNotes"
+                    :rows "3"
+                    :placeholder "例: - 荷物制限なし希望\n- 週末旅行"
+                    :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none resize-y"}
+         notes]]
+
+       ;; ブラウザ表示・Webhook 設定
+       [:div {:class "p-4 bg-slate-900 rounded-xl border border-slate-800 space-y-3"}
+        [:label {:class "flex items-center space-x-2 text-slate-300 cursor-pointer"}
+         [:input {:type "checkbox"
+                  :name "useDefaultWebhook"
+                  :value "true"
+                  :checked true
+                  :class "rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"}]
+         [:span "デフォルトの Discord / Slack Webhook に通知する"]]
+        [:label {:class "flex items-center space-x-2 text-slate-300 cursor-pointer"}
+         [:input {:type "checkbox"
+                  :name "showBrowser"
+                  :value "true"
+                  :class "rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"}]
+         [:span {:class "text-sky-300 font-medium"} "定期巡回時もブラウザ画面を表示する (手動支援モード)"]]]
+
+       ;; アクションボタン
+       [:div {:class "pt-4 border-t border-slate-800 flex items-center justify-end space-x-3"}
+        [:a {:href "/"
+             :class "px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition text-center"}
+         "キャンセル"]
+        [:button {:type "submit"
+                  :class "px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold shadow-md transition flex items-center gap-2"}
+         [:i {:class "fa-solid fa-plane-departure"}]
+         "登録して巡回開始"]]]]]))

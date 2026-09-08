@@ -46,3 +46,7 @@ doc/work/*.db*
 # Environment variables
 .env
 !.env.example
+
+# Clojure-kondo cache
+.clj-kondo/.cache/
+
