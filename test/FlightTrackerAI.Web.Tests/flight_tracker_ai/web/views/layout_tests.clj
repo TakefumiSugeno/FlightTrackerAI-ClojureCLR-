@@ -19,3 +19,12 @@
       (is (str/includes? res "/api/settings/modal"))
       (is (str/includes? res "insertTemplate"))
       (is (str/includes? res "parseWithAI")))))
+
+(deftest test-base-layout-modal-and-esc-handlers
+  (testing "base-layout includes closeCurrentModal, window global attachment, and Escape key listener"
+    (let [res (layout/base-layout "テスト" [:div "テスト"])]
+      (is (str/includes? res "closeCurrentModal"))
+      (is (str/includes? res "window.closeCurrentModal = closeCurrentModal"))
+      (is (str/includes? res "Escape"))
+      (is (str/includes? res "modal-container")))))
+

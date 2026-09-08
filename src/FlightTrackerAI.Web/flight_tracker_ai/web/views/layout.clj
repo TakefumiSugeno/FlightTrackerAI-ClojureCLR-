@@ -88,15 +88,19 @@
         }
 
         function closeCurrentModal() {
-          const active = document.getElementById('active-modal');
-          if (active) active.remove();
-          const qn = document.getElementById('quickNoteModal');
-          if (qn) qn.remove();
-          const tm = document.getElementById('timelineModal');
-          if (tm) tm.remove();
           const container = document.getElementById('modal-container');
           if (container) container.innerHTML = '';
+          document.querySelectorAll('#active-modal, #quickNoteModal, #timelineModal, .modal-backdrop-clickable').forEach(function(el) {
+            el.remove();
+          });
         }
+        window.closeCurrentModal = closeCurrentModal;
+
+        window.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' || e.key === 'Esc') {
+            closeCurrentModal();
+          }
+        });
 
         function insertTemplate(type) {
           const textarea = document.getElementById('aiInput');

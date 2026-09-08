@@ -11,7 +11,9 @@
       (is (str/includes? html "新規フライト監視タスク登録"))
       (is (str/includes? html "HND"))
       (is (str/includes? html "CDG"))
-      (is (str/includes? html "/api/tasks")))))
+      (is (str/includes? html "/api/tasks"))
+      (is (str/includes? html "closeCurrentModal()"))
+      (is (str/includes? html "modal-backdrop-clickable")))))
 
 (deftest test-render-settings-modal
   (testing "render-settings-modal displays form inputs for global settings"

@@ -109,7 +109,7 @@
             (let [all-tasks (task-repo/get-all-tasks connection-string)]
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks))}))
+               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('ユーザーメモを更新しました！', true);"))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 5. POST /api/tasks/:id/toggle-status
@@ -123,10 +123,11 @@
           (let [new-status (if (= (:status t) :paused) :active :paused)
                 updated-t (assoc t :status new-status :updated-at (DateTimeOffset/UtcNow))]
             (task-repo/update-task connection-string updated-t)
-            (let [all-tasks (task-repo/get-all-tasks connection-string)]
+            (let [all-tasks (task-repo/get-all-tasks connection-string)
+                  msg (if (= new-status :paused) "タスクの巡回を一時停止しました。" "タスクの巡回を再開しました！")]
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks))}))
+               :body (h/render-html (dash/render-dashboard-content all-tasks (str "closeCurrentModal(); showToast('" msg "', true);")))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 6. GET /api/tasks/view (HTML fragment for HTMX)
@@ -177,7 +178,7 @@
             (let [all-tasks (task-repo/get-all-tasks connection-string)]
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks))}))))
+               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('新規タスクを登録しました！', true);"))}))))
 
       ;; 8. POST /api/tasks/standalone (Create Task via Standalone Page)
       (and (= method "POST") (= path "/api/tasks/standalone"))
@@ -262,7 +263,7 @@
             (let [all-tasks (task-repo/get-all-tasks connection-string)]
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks))}))
+               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('タスク設定を更新しました！', true);"))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 10. DELETE /api/tasks/:id
@@ -274,7 +275,7 @@
         (let [all-tasks (task-repo/get-all-tasks connection-string)]
           {:status 200
            :content-type "text/html; charset=utf-8"
-           :body (h/render-html (dash/render-dashboard-content all-tasks))}))
+           :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('タスクを削除しました。', true);"))}))
 
       ;; 11. POST /api/tasks/:id/run (Immediate Scrape with 409 Conflict Check & headless param)
       (and (= method "POST")
@@ -300,7 +301,7 @@
             (let [all-tasks (task-repo/get-all-tasks connection-string)]
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks))}))))
+               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('巡回が完了しました。', true);"))}))))
 
       ;; 12. GET /api/tasks/:id/detail or /api/tasks/:id/detail-modal
       (and (= method "GET")

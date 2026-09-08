@@ -7,9 +7,10 @@
 
 (defn- modal-backdrop [title-str content]
   [:div {:id "active-modal"
-         :class "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+         :class "modal-backdrop-clickable fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
          :onclick "if (event.target === this) closeCurrentModal();"}
-   [:div {:class "bg-slate-950 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-800 text-slate-100"}
+   [:div {:class "bg-slate-950 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-800 text-slate-100 cursor-default"
+          :onclick "event.stopPropagation();"}
     [:div {:class "px-6 py-4 border-b border-slate-800 bg-slate-900 flex items-center justify-between"}
      [:h3 {:class "text-sm font-bold text-white flex items-center gap-2"}
       [:i {:class "fa-solid fa-circle-plus text-sky-400"}]
@@ -24,20 +25,21 @@
 (defn render-quick-note-modal [task-id current-note route-title]
   (h/render-html
     [:div {:id "quickNoteModal"
-           :class "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+           :class "modal-backdrop-clickable fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
            :onclick "if (event.target === this) closeCurrentModal();"}
-     [:div {:class "bg-slate-950 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 text-slate-100"}
+     [:div {:class "bg-slate-950 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 text-slate-100 cursor-default"
+            :onclick "event.stopPropagation();"}
       [:div {:class "flex items-center justify-between border-b border-slate-800 pb-3"}
        [:h3 {:class "text-sm font-bold text-white flex items-center space-x-2"}
         [:i {:class "fa-solid fa-file-lines text-sky-400"}]
         [:span (str "タスクのメモ・要望編集: " (or route-title (str task-id)))]]
        [:button {:type "button"
                  :onclick "closeCurrentModal()"
-                 :class "text-slate-400 hover:text-white p-1"}
+                 :class "text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"}
         [:i {:class "fa-solid fa-xmark text-base"}]]]
       [:form {:hx-patch (str "/api/tasks/" task-id "/notes")
               :hx-target "#dashboard-container"
-              :onsubmit "closeCurrentModal()"
+              :hx-swap "outerHTML"
               :class "space-y-3 text-xs"}
        [:div
         [:label {:class "block text-slate-300 font-semibold mb-1"}
@@ -53,10 +55,10 @@
        [:div {:class "flex justify-end space-x-2 pt-2 border-t border-slate-800"}
         [:button {:type "button"
                   :onclick "closeCurrentModal()"
-                  :class "px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium"}
+                  :class "px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"}
          "キャンセル"]
         [:button {:type "submit"
-                  :class "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold"}
+                  :class "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold transition"}
          "メモを保存"]]]]]))
 
 (defn render-task-modal [task-opt initial-params]
@@ -89,7 +91,7 @@
         title
         [:form {:hx-post (if is-edit (str "/api/tasks/" (:id task-opt)) "/api/tasks")
                 :hx-target "#dashboard-container"
-                :onsubmit "closeCurrentModal()"
+                :hx-swap "outerHTML"
                 :class "space-y-4"}
          [:div
           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "タスク名"]
@@ -212,9 +214,10 @@
         history-json (dto/to-json (or history []))]
     (h/render-html
       [:div {:id "timelineModal"
-             :class "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+             :class "modal-backdrop-clickable fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
              :onclick "if (event.target === this) closeCurrentModal();"}
-       [:div {:class "bg-slate-950 border border-slate-800 w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto space-y-6 text-slate-100"}
+       [:div {:class "bg-slate-950 border border-slate-800 w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto space-y-6 text-slate-100 cursor-default"
+              :onclick "event.stopPropagation();"}
         ;; Header
         [:div {:class "flex items-center justify-between border-b border-slate-800 pb-3"}
          [:div
