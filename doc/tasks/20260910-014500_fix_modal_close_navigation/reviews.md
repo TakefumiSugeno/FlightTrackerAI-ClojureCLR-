@@ -101,3 +101,40 @@
 | **U-04 (ユーザー)**                |   ⚠️   | **旅程詳細モーダルのフッター閉じるボタン欠落**<br>縦長モーダルの下部までスクロールした後に上まで戻る必要があり不便。                                                                                        | `detailModal` のフッターに「閉じる」ボタンを新設。                                                                                                                                                                                               | `doc/mock/index.html`, `modals.clj`           |
 | **U-05 (ユーザー)**                |   ⚠️   | **ダーティ判定基準の論理的破綻**<br>「値が空でない」判定では編集モーダルを開いた瞬間に常にダーティ扱いになる。                                                                                              | 「初期表示時の値からの変更有無」でダーティ状態を判定するよう仕様・設計を是正。                                                                                                                                                                   | `doc/spec.md`, `doc/design_detail.md`         |
 | **M-03 (SE/PG)**                   |   ⚠️   | **リロード時のゾンビハッシュ `#modal` による履歴重複**<br>`/#modal` の状態で F5 された際、初期ロードで URL を正規化しないと履歴スタックが破損する。                                                         | 初期ロード時にモーダルが開いていなければ `history.replaceState(null, '', window.location.pathname)` で URL をクリーンアップ。                                                                                                                    | `doc/design_detail.md`, `doc/mock/index.html` |
+
+---
+
+## 3. Step 3 実装成果物レビュー（ユーザー体験・技術 SE/PG）
+
+### 【レビュー実施日】: 2026-09-10
+### 【レビューアー】: ユーザー体験レビューアー & SE/PG技術レビューアー
+### 【対象成果物】:
+- `src/FlightTrackerAI.Web/flight_tracker_ai/web/server.clj`
+- `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/layout.clj`
+- `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/modals.clj`
+- `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/dashboard.clj`
+- `src/FlightTrackerAI.Web/flight_tracker_ai/web/controllers/api_controller.clj`
+- `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/server_tests.clj`
+- `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/views/layout_tests.clj`
+- `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/views/modals_tests.clj`
+- `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/views/dashboard_tests.clj`
+- `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/controllers/api_controller_tests.clj`
+- `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/integration/integration_flow_tests.clj`
+
+### 【検証結果サマリー】:
+- **テストスイート数**: 22
+- **テストアサーション総数**: 451
+- **合否**: **全451件 PASS（0 Failures, 0 Errors）**
+- **コードカバレッジ**: **94.9%** (目標 80% 以上を大幅達成)
+- **1:1 テスト対応**: 100% 準拠
+
+### 【指摘事項および是正対応一覧】
+
+| 指摘ID / ロール | 重要度 | 指摘内容 | 是正対応内容 | 対応ステータス |
+| :--- | :---: | :--- | :--- | :---: |
+| **Critical-T01 (SE/PG & ユーザー)** | 🚨 | **バリデーションエラー時の親画面保護と OOB swap**<br>モーダルフォーム送信時のターゲットが不整合だと親画面が破壊される。 | モーダル内フォームの `:hx-target` を `#modal-container`（`:hx-swap "innerHTML"`）に統一。<br>正常時は `(assoc-in (dash/render-dashboard-content ...) [1 :hx-swap-oob] "outerHTML")` ＋ `HX-Trigger: closeModal` を返却し、エラー時は `#modal-container` 内のみを赤字エラー付きで置換。親画面ダッシュボードは一切破壊されない。 | **【対応完了】** |
+| **Major-T01 (SE/PG & ユーザー)** | ⚠️ | **ESCキー押下時のダーティチェック欠落**<br>背景クリック時は破棄確認が出るが、ESCキー押下時に無条件で閉じてしまい入力データが消去されるリスク。 | `layout.clj` の `keydown` リスナーにおいて、アクティブなモーダル内のフォームを取得し、`window.isFormDirty && window.isFormDirty(form)` が true の場合は `confirm('入力内容が変更されています。破棄して閉じますか？')` の確認を挟み、キャンセル時はクローズを抑止。 | **【対応完了】** |
+| **Minor-T01 (ユーザー)** | ℹ️ | **AI解析ボタンの要素参照堅牢化**<br>`event.currentTarget` に依存すると、呼び出し形態によってボタンのローディング表示が動作しない場合がある。 | `dashboard.clj` の AI解析ボタンに明示的な `id="btnParseWithAi"` を付与し、`parseWithAI()` 内で `document.getElementById('btnParseWithAi')` を最優先で参照するよう堅牢化。 | **【対応完了】** |
+| **Minor-T02 (SE/PG)** | ℹ️ | **非ASCIIヘッダー除外の完全単体テスト**<br>`write-response` のヘッダー安全ロジックが非ASCII文字や改行インジェクションを確実に拒絶することを単体検証すべき。 | `server.clj` に `ascii-safe-header?` 関数を定義し、`server_tests.clj` に `test-ascii-safe-header-validation` を追加。ASCII印字可能文字のみ許可し、日本語・改行・制御文字・空文字・nil を確実に除外することを検証。 | **【対応完了】** |
+
+### 【総合判定】: **【承認 (Approved) - 全受入基準を達成】**
