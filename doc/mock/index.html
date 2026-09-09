@@ -1880,10 +1880,12 @@
     <!-- MODAL 1: Detail Modal -->
     <div
       id="detailModal"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4"
+      onclick="if (event.target === this) closeDetailModal();"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 cursor-pointer"
     >
       <div
-        class="bg-slate-950 border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        class="bg-slate-950 border border-slate-800 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default"
+        onclick="event.stopPropagation()"
       >
         <div
           class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900"
@@ -1910,7 +1912,7 @@
           </button>
         </div>
 
-        <div class="p-6 overflow-y-auto space-y-6">
+        <div class="p-6 overflow-y-auto space-y-6 flex-1">
           <!-- AI Advice Box -->
           <div
             class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-start space-x-3"
@@ -1919,32 +1921,26 @@
               <i data-lucide="bot" class="w-4 h-4"></i>
             </div>
             <div>
-              <div class="text-xs font-semibold text-sky-400">
-                AI 買い時分析コメント (OpenRouter)
-              </div>
-              <p class="text-xs text-slate-300 mt-1 leading-relaxed">
-                現在、過去30日間の最安値水準（¥148,200 / 往路:
-                ANA+シンガポール航空, 復路:
-                エールフランス）を記録しています。GW期間としては相場より約30%安く、目標価格（¥160,000）をクリアしているため、即時予約を推奨します。
+              <h4 class="text-xs font-bold text-sky-400">
+                AI 買い時診断サマリー (キャッシュ保持中)
+              </h4>
+              <p class="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                出発9ヶ月前の水準として平均的（過去最安値: ¥148,200）。ANA と
+                シンガポール航空の組み合わせが最安です。往路のチャンギ乗継（2h15m）は非常にスムーズ。目標価格（¥160,000）をクリアしているため、購入検討を推奨します。
               </p>
             </div>
           </div>
 
-          <!-- Strict Flight Data Breakdown -->
+          <!-- Timeline Section -->
           <div
-            class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-4"
+            class="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-4"
           >
-            <div
-              class="flex items-center justify-between border-b border-slate-800 pb-2"
-            >
-              <div class="flex items-center space-x-2">
-                <i data-lucide="route" class="w-4 h-4 text-sky-400"></i>
-                <span class="text-xs font-bold text-white"
-                  >最安便の区間詳細（日程・フライト時間・トランジット時間・便名）</span
-                >
-              </div>
-              <span class="text-xs text-emerald-400 font-bold"
-                >総額: ¥148,200 (Google Flights)</span
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-300"
+                >旅程タイムライン (複数航空会社 &amp; 乗継詳細)</span
+              >
+              <span class="text-xs text-slate-400 font-mono"
+                >全行程: 37時間35分 (往復実移動)</span
               >
             </div>
 
@@ -2195,16 +2191,31 @@
             </div>
           </div>
         </div>
+
+        <!-- Detail Modal Footer Close Button -->
+        <div
+          class="px-6 py-3 border-t border-slate-800 bg-slate-900/80 flex justify-end"
+        >
+          <button
+            type="button"
+            onclick="closeDetailModal()"
+            class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition"
+          >
+            閉じる
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- MODAL 2: New Task Modal -->
     <div
       id="newTaskModal"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4"
+      onclick="if (event.target === this) closeNewTaskModal();"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 cursor-pointer"
     >
       <div
-        class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4"
+        class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 cursor-default"
+        onclick="event.stopPropagation()"
       >
         <div
           class="flex items-center justify-between border-b border-slate-800 pb-3"
@@ -2429,10 +2440,12 @@
     <!-- MODAL 3: Task Edit Modal -->
     <div
       id="editModal"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4"
+      onclick="if (event.target === this) closeEditModal();"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 cursor-pointer"
     >
       <div
-        class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4"
+        class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 cursor-default"
+        onclick="event.stopPropagation()"
       >
         <div
           class="flex items-center justify-between border-b border-slate-800 pb-3"
@@ -2544,10 +2557,12 @@
     <!-- MODAL 4: Global Settings Modal -->
     <div
       id="settingsModal"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4"
+      onclick="if (event.target === this) closeSettingsModal();"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 cursor-pointer"
     >
       <div
-        class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4"
+        class="bg-slate-950 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 cursor-default"
+        onclick="event.stopPropagation()"
       >
         <div
           class="flex items-center justify-between border-b border-slate-800 pb-3"
@@ -2665,10 +2680,12 @@
     <!-- MODAL 5: Delete Confirmation Modal -->
     <div
       id="deleteModal"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4"
+      onclick="if (event.target === this) closeDeleteModal();"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 cursor-pointer"
     >
       <div
-        class="bg-slate-950 border border-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4"
+        class="bg-slate-950 border border-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 cursor-default"
+        onclick="event.stopPropagation()"
       >
         <div
           class="w-12 h-12 rounded-full bg-rose-950 text-rose-400 flex items-center justify-center mx-auto border border-rose-800"
@@ -2709,10 +2726,12 @@
     <!-- MODAL 6: Quick Note Edit Modal -->
     <div
       id="quickNoteModal"
-      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4"
+      onclick="if (event.target === this) closeQuickNoteModal();"
+      class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 cursor-pointer"
     >
       <div
-        class="bg-slate-950 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4"
+        class="bg-slate-950 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 cursor-default"
+        onclick="event.stopPropagation()"
       >
         <div
           class="flex items-center justify-between border-b border-slate-800 pb-3"
@@ -3171,32 +3190,94 @@
       }
 
       // ==========================================
-      // Modal Controls
+      // Modal Controls (with History API & Key Navigation)
       // ==========================================
+      window.__modalState = { isOpen: false };
+
+      function syncModalOpenState() {
+        if (!window.__modalState.isOpen) {
+          history.pushState({ modalOpen: true }, "", "#modal");
+          window.__modalState.isOpen = true;
+        }
+        document.body.classList.add("overflow-hidden");
+      }
+
+      function syncModalCloseState(fromPopState = false) {
+        if (window.__modalState.isOpen) {
+          window.__modalState.isOpen = false;
+          if (!fromPopState && location.hash === "#modal") {
+            history.back();
+          }
+        }
+        document.body.classList.remove("overflow-hidden");
+      }
+
+      function closeAllModals(fromPopState = false) {
+        [
+          "detailModal",
+          "newTaskModal",
+          "editModal",
+          "settingsModal",
+          "quickNoteModal",
+          "deleteModal",
+        ].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.classList.add("hidden");
+        });
+        syncModalCloseState(fromPopState);
+      }
+
+      window.addEventListener("popstate", (e) => {
+        if (window.__modalState.isOpen) {
+          closeAllModals(true);
+        }
+      });
+
+      window.addEventListener("keydown", (e) => {
+        // IME変換中のESCキー押下による誤消去を防止
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "Escape" || e.key === "Esc") {
+          closeAllModals();
+        }
+      });
+
+      // リロード時のゾンビハッシュ (#modal) を安全にクリーンアップ
+      if (location.hash === "#modal") {
+        history.replaceState(null, "", window.location.pathname);
+      }
+
       function openDetailModal(route) {
         document.getElementById("detailModal").classList.remove("hidden");
+        syncModalOpenState();
         setTimeout(initChart, 50);
       }
       function closeDetailModal() {
         document.getElementById("detailModal").classList.add("hidden");
+        syncModalCloseState();
       }
       function openNewTaskModal() {
         document.getElementById("newTaskModal").classList.remove("hidden");
+        syncModalOpenState();
       }
       function closeNewTaskModal() {
         document.getElementById("newTaskModal").classList.add("hidden");
+        syncModalCloseState();
       }
       function openEditModal(route) {
         document.getElementById("editModal").classList.remove("hidden");
+        syncModalOpenState();
       }
       function closeEditModal() {
         document.getElementById("editModal").classList.add("hidden");
+        syncModalCloseState();
       }
       function openSettingsModal() {
         document.getElementById("settingsModal").classList.remove("hidden");
+        syncModalOpenState();
       }
       function closeSettingsModal() {
         document.getElementById("settingsModal").classList.add("hidden");
+        syncModalCloseState();
       }
 
       let currentEditingNoteRoute = "";
@@ -3205,9 +3286,11 @@
         document.getElementById("quickNoteRouteTitle").innerText = routeId;
         document.getElementById("quickNoteText").value = currentNote || "";
         document.getElementById("quickNoteModal").classList.remove("hidden");
+        syncModalOpenState();
       }
       function closeQuickNoteModal() {
         document.getElementById("quickNoteModal").classList.add("hidden");
+        syncModalCloseState();
       }
       function saveQuickNote() {
         const note = document.getElementById("quickNoteText").value;
@@ -3220,9 +3303,11 @@
         currentDeletingRoute = routeId;
         document.getElementById("deleteTaskRoute").innerText = routeName;
         document.getElementById("deleteModal").classList.remove("hidden");
+        syncModalOpenState();
       }
       function closeDeleteModal() {
         document.getElementById("deleteModal").classList.add("hidden");
+        syncModalCloseState();
       }
       function confirmDelete() {
         closeDeleteModal();

@@ -142,7 +142,46 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
           (sys-func [WaitCallback Object] [_] (handle-request ctx)))))))
 ```
 
----
+### 2.3 モーダルナビゲーション・ライフサイクル設計 (Modal Navigation & Lifecycle)
+
+クライアント側のイベントモデルとブラウザ履歴を整合させるため、以下の状態管理と排他制御を導入します:
+
+1. **二重フェッチの完全排除**:
+   - `dashboard.clj` 内の全ボタン（新規登録・編集・メモ・詳細）から `:hx-get` と `:onclick` の同居を廃止し、HTMX による宣言的ロード（`:hx-get` + `:hx-target="#modal-container"`）に統一。
+   - インライン JS での重複 fetch を全廃し、1クリック＝1リクエストを保証。
+
+2. **History API 排他制御ステートマシン**:
+   - クライアント側で `window.__modalState = { isOpen: false, isNavigatingBack: false }` を保持。
+   - **初期ロード時の URL サニタイズ**: ページ読み込み時に URL に `#modal` が残存している場合は `history.replaceState(null, '', window.location.pathname)` でクリーンアップし、履歴破損を防止。
+   - **モーダルオープン時**:
+     - `htmx:afterSwap`（ターゲットが `#modal-container` かつモーダル要素存在時）を検知。
+     - `!window.__modalState.isOpen` の場合、`history.pushState({ modalOpen: true }, '', '#modal')` を発行し、`isOpen = true`。
+     - 既に開いている状態でのモーダル差し替え（連続展開）時は `history.replaceState` を適用。
+     - `document.body.classList.add('overflow-hidden')` で背面スクロールをロック。
+   - **ブラウザ戻る操作 (`popstate`) 時**:
+     - `window.__modalState.isOpen` の場合、DOM 上のモーダルを消去し、`isOpen = false` に設定（`history.back()` は呼ばない）。
+     - `document.body.classList.remove('overflow-hidden')` でスクロールロック解除。
+   - **UI 操作（×ボタン、キャンセル、背景クリック、ESCキー、保存成功）時**:
+     - `window.__modalState.isOpen` の場合、`history.state?.modalOpen` または `location.hash === '#modal'` を確認の上、`history.back()` を発行して履歴を整合。直後の `popstate` はフラグにより二重処理を抑止。
+
+3. **ダーティフォーム保護 & IME安全機構**:
+   - フォーム各入力項目の「初期表示時の値からの変更有無」を追跡し、変更がある場合のみ背景クリックによる即時破棄を抑止。明示的な「キャンセル」ボタンまたは「×」ボタン押下によってのみクローズ可能とする。
+   - `keydown` イベント監視時、`e.isComposing || e.keyCode === 229` の場合は ESC キー押下であってもモーダルクローズを抑止し、日本語入力変換中の意図しない消去を保護。
+
+### 2.4 HTTP ヘッダー伝搬・レスポンス設計 (HTTP Header & Error Handling)
+
+1. **カスタムレスポンスヘッダーの ASCII 安全な出力 (`server.clj`)**:
+   - .NET `HttpListenerResponse.AddHeader` の HTTP/1.1 ASCII 準拠制約を満たすため、`server.clj` の `write-response` でヘッダーマップ（例: `{"HX-Trigger" "closeModal"}`）を安全に設定。
+   - 正規表現 `^[\x20-\x7E]+$` により ASCII 安全性を検証した上で `.AddHeader` を実行。日本語等のマルチバイト文字列はヘッダー値に含めず、レスポンス HTML ボディ側で渡す。
+
+2. **正常系と異常系の HTMX swap 分離設計 (`api_controller.clj`)**:
+   - モーダル内フォームの `:hx-target` はモーダル自身（または `#modal-container`）とし、親画面の破壊を防止。
+   - **正常終了時 (200 OK)**:
+     - レスポンスヘッダー: `{"HX-Trigger" "closeModal"}`
+     - レスポンスボディ: `<div id="dashboard-container" hx-swap-oob="outerHTML">...最新ダッシュボードHTML...</div>`
+     - クライアント側 `document.body.addEventListener('closeModal', ...)` が発火し、確実にモーダルをクローズ。
+   - **バリデーションエラー・送信失敗時 (400 Bad Request / 200 エラー表示)**:
+     - `HX-Trigger: closeModal` は出力せず、インライン赤字エラーメッセージを含めたモーダル HTML を返却。モーダルおよびユーザー入力値を完全に維持し、最初のエラー項目へ自動フォーカスを誘導。
 
 ## 3. ドメイン設計 (Domain Models in ClojureCLR)
 
