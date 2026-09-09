@@ -110,7 +110,7 @@
               {:status 200
                :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('ユーザーメモを更新しました！', true);"))}))
+               :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('ユーザーメモを更新しました！', true);") [1 :hx-swap-oob] "outerHTML"))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 5. POST /api/tasks/:id/toggle-status
@@ -180,7 +180,7 @@
               {:status 200
                :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('新規タスクを登録しました！', true);"))}))))
+               :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('新規タスクを登録しました！', true);") [1 :hx-swap-oob] "outerHTML"))}))))
 
       ;; 8. POST /api/tasks/standalone (Create Task via Standalone Page)
       (and (= method "POST") (= path "/api/tasks/standalone"))
@@ -270,7 +270,7 @@
                   {:status 200
                    :headers {"HX-Trigger" "closeModal"}
                    :content-type "text/html; charset=utf-8"
-                   :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('タスク設定を更新しました！', true);"))}))))
+                   :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('タスク設定を更新しました！', true);") [1 :hx-swap-oob] "outerHTML"))}))))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 10. DELETE /api/tasks/:id

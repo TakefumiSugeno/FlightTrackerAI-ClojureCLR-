@@ -22,7 +22,10 @@
     (with-open [reader (StreamReader. stream Encoding/UTF8)]
       (.ReadToEnd reader))))
 
-(defn- write-response
+(defn ascii-safe-header? [s]
+  (and (string? s) (boolean (re-matches #"^[\x20-\x7E]+$" s))))
+
+(defn write-response
   ([^System.Net.HttpListenerResponse resp status content-type ^String body-str]
    (write-response resp status content-type body-str nil))
   ([^System.Net.HttpListenerResponse resp status content-type ^String body-str headers]
@@ -34,8 +37,8 @@
          (let [k-str (name k)
                v-str (str v)]
            ;; .NET HttpListener headers must be ASCII characters (0x20 to 0x7E)
-           (when (and (re-matches #"^[\x20-\x7E]+$" k-str)
-                      (re-matches #"^[\x20-\x7E]+$" v-str))
+           (when (and (ascii-safe-header? k-str)
+                      (ascii-safe-header? v-str))
              (.AddHeader resp k-str v-str)))))
      (let [bytes (.GetBytes Encoding/UTF8 (or body-str ""))
            output (.OutputStream resp)]

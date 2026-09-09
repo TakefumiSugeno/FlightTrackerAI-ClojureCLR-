@@ -60,3 +60,15 @@
         (finally
           (.Stop listener)
           (.Close listener))))))
+
+(deftest test-ascii-safe-header-validation
+  (testing "ascii-safe-header? accepts ASCII printable characters and rejects non-ASCII or control characters"
+    (is (true? (server/ascii-safe-header? "HX-Trigger")))
+    (is (true? (server/ascii-safe-header? "closeModal")))
+    (is (true? (server/ascii-safe-header? "X-Custom-123_test!")))
+    (is (false? (server/ascii-safe-header? "X-日本語-キー")))
+    (is (false? (server/ascii-safe-header? "値に日本語を含む")))
+    (is (false? (server/ascii-safe-header? "Header\r\nInjected")))
+    (is (false? (server/ascii-safe-header? "")))
+    (is (false? (server/ascii-safe-header? nil)))))
+

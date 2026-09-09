@@ -114,6 +114,30 @@
       (is (= "closeModal" (get-in res [:headers "HX-Trigger"])))
       (is (= "更新されたメモ" (:user-notes updated-task))))))
 
+(deftest test-update-task-post
+  (testing "POST /api/tasks/:id updates task with HX-Trigger and OOB swap on success, preserves modal on error"
+    (let [conn-str (create-test-db)
+          task (insert-test-task! conn-str "更新前タスク")
+          task-id (:id task)
+          ;; 1. Normal update
+          update-body "title=%E6%9B%B4%E6%96%B0%E5%BE%8C%E3%82%BF%E3%82%B9%E3%82%AF&origin=HND&destination=CDG&targetPriceJpy=150000&checkIntervalHours=6"
+          res-ok (api/handle-api-request conn-str "POST" (str "/api/tasks/" task-id) update-body)
+          updated (task-repo/get-task-by-id conn-str task-id)]
+      (is (= 200 (:status res-ok)))
+      (is (= "closeModal" (get-in res-ok [:headers "HX-Trigger"])))
+      (is (str/includes? (:body res-ok) "hx-swap-oob=\"outerHTML\""))
+      (is (= "更新後タスク" (:title updated)))
+      (is (= 150000 (:target-price-jpy updated)))
+      (is (= 6 (:check-interval-hours updated)))
+
+      ;; 2. Validation error update (invalid IATA)
+      (let [invalid-body "title=%E4%B8%8D%E6%AD%A3IATA&origin=BADORIGIN&destination=CDG"
+            res-err (api/handle-api-request conn-str "POST" (str "/api/tasks/" task-id) invalid-body)]
+        (is (= 200 (:status res-err)))
+        (is (nil? (get-in res-err [:headers "HX-Trigger"])))
+        (is (str/includes? (:body res-err) "英字3文字である必要があります"))
+        (is (str/includes? (:body res-err) "BADORIGIN"))))))
+
 (deftest test-task-history-and-detail
   (testing "GET /api/tasks/:id/history returns json and /detail returns modal html"
     (let [conn-str (create-test-db)

@@ -42,8 +42,8 @@
                  :class "text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"}
         [:i {:class "fa-solid fa-xmark text-base"}]]]
       [:form {:hx-patch (str "/api/tasks/" task-id "/notes")
-              :hx-target "#dashboard-container"
-              :hx-swap "outerHTML"
+              :hx-target "#modal-container"
+              :hx-swap "innerHTML"
               :class "space-y-3 text-xs"}
        [:div
         [:label {:class "block text-slate-300 font-semibold mb-1"}
@@ -96,8 +96,8 @@
        (modal-backdrop
          title
          [:form {:hx-post (if is-edit (str "/api/tasks/" (:id task-opt)) "/api/tasks")
-                 :hx-target "#dashboard-container"
-                 :hx-swap "outerHTML"
+                 :hx-target "#modal-container"
+                 :hx-swap "innerHTML"
                  :class "space-y-4"}
           (when (and error-msg (not (str/blank? error-msg)))
             [:div {:class "p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 text-xs text-rose-300 flex items-center gap-2"}

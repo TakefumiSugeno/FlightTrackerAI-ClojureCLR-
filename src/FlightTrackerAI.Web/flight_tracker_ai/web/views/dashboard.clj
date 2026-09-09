@@ -83,6 +83,7 @@
     [:span {:class "text-[11px] text-slate-400"}
      "※ 箇条書きやMarkdown、長文からOpenRouter AIが自動で各パラメータを抽出して登録フォームへ展開します。"]
     [:button {:type "button"
+              :id "btnParseWithAi"
               :onclick "parseWithAI()"
               :class "bg-sky-600 hover:bg-sky-500 active:scale-95 transition text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5 whitespace-nowrap shadow-sm"}
      [:i {:class "fa-solid fa-wand-magic-sparkles text-xs"}]
@@ -568,7 +569,7 @@
          showToast('AI解析用の条件を入力してください', false);
          return;
        }
-       const btn = (typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : null;
+       const btn = document.getElementById('btnParseWithAi') || ((typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : null);
        const origHtml = btn ? btn.innerHTML : '';
        if (btn) {
          btn.disabled = true;

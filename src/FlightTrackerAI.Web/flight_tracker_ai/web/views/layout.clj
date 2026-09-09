@@ -158,10 +158,19 @@
           }
         });
 
-        // ESC key handler with IME composition guard
+        // ESC key handler with IME composition guard and dirty check
         window.addEventListener('keydown', function(e) {
           if ((e.key === 'Escape' || e.key === 'Esc') && !e.isComposing && e.keyCode !== 229) {
-            closeCurrentModal(true);
+            const activeModal = document.querySelector('#active-modal, #quickNoteModal, #timelineModal, .modal-backdrop-clickable');
+            if (activeModal) {
+              const form = activeModal.querySelector('form');
+              if (window.isFormDirty && form && window.isFormDirty(form)) {
+                if (!confirm('入力内容が変更されています。破棄して閉じますか？')) {
+                  return;
+                }
+              }
+              closeCurrentModal(true);
+            }
           }
         });
 
