@@ -108,8 +108,9 @@
             (task-repo/update-task connection-string updated-t)
             (let [all-tasks (task-repo/get-all-tasks connection-string)]
               {:status 200
+               :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('ユーザーメモを更新しました！', true);"))}))
+               :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('ユーザーメモを更新しました！', true);"))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 5. POST /api/tasks/:id/toggle-status
@@ -127,7 +128,7 @@
                   msg (if (= new-status :paused) "タスクの巡回を一時停止しました。" "タスクの巡回を再開しました！")]
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks (str "closeCurrentModal(); showToast('" msg "', true);")))}))
+               :body (h/render-html (dash/render-dashboard-content all-tasks (str "showToast('" msg "', true);")))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 6. GET /api/tasks/view (HTML fragment for HTMX)
@@ -142,9 +143,9 @@
       (let [origin-res (domain/create-iata-code (:origin form))
             dest-res (domain/create-iata-code (:destination form))]
         (if (or (:error origin-res) (:error dest-res))
-          {:status 400
-           :content-type "text/plain; charset=utf-8"
-           :body (or (:error origin-res) (:error dest-res))}
+          {:status 200
+           :content-type "text/html; charset=utf-8"
+           :body (modals/render-task-modal nil form (or (:error origin-res) (:error dest-res)))}
           (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
                 outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime System.DateTime/UtcNow)))
                 inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
@@ -177,8 +178,9 @@
             (task-repo/create-task connection-string task-item)
             (let [all-tasks (task-repo/get-all-tasks connection-string)]
               {:status 200
+               :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('新規タスクを登録しました！', true);"))}))))
+               :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('新規タスクを登録しました！', true);"))}))))
 
       ;; 8. POST /api/tasks/standalone (Create Task via Standalone Page)
       (and (= method "POST") (= path "/api/tasks/standalone"))
@@ -243,27 +245,32 @@
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
           (let [origin-res (if (:origin form) (domain/create-iata-code (:origin form)) {:ok (:origin t)})
-                dest-res (if (:destination form) (domain/create-iata-code (:destination form)) {:ok (:destination t)})
-                target-price (if-not (str/blank? (:targetPriceJpy form))
-                               (try (long (read-string (:targetPriceJpy form))) (catch Exception _ (:target-price-jpy t)))
-                               (:target-price-jpy t))
-                interval (if-not (str/blank? (:checkIntervalHours form))
-                           (try (long (read-string (:checkIntervalHours form))) (catch Exception _ (:check-interval-hours t)))
-                           (:check-interval-hours t))
-                updated-t (assoc t
-                                 :title (or (:title form) (:title t))
-                                 :origin (:ok origin-res)
-                                 :destination (:ok dest-res)
-                                 :target-price-jpy target-price
-                                 :check-interval-hours interval
-                                 :notification-webhook-url (if-not (str/blank? (:webhookUrl form)) (:webhookUrl form) (:notification-webhook-url t))
-                                 :user-notes (if-not (nil? (:userNotes form)) (:userNotes form) (:user-notes t))
-                                 :updated-at (DateTimeOffset/UtcNow))]
-            (task-repo/update-task connection-string updated-t)
-            (let [all-tasks (task-repo/get-all-tasks connection-string)]
+                dest-res (if (:destination form) (domain/create-iata-code (:destination form)) {:ok (:destination t)})]
+            (if (or (:error origin-res) (:error dest-res))
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('タスク設定を更新しました！', true);"))}))
+               :body (modals/render-task-modal t form (or (:error origin-res) (:error dest-res)))}
+              (let [target-price (if-not (str/blank? (:targetPriceJpy form))
+                                   (try (long (read-string (:targetPriceJpy form))) (catch Exception _ (:target-price-jpy t)))
+                                   (:target-price-jpy t))
+                    interval (if-not (str/blank? (:checkIntervalHours form))
+                               (try (long (read-string (:checkIntervalHours form))) (catch Exception _ (:check-interval-hours t)))
+                               (:check-interval-hours t))
+                    updated-t (assoc t
+                                     :title (or (:title form) (:title t))
+                                     :origin (:ok origin-res)
+                                     :destination (:ok dest-res)
+                                     :target-price-jpy target-price
+                                     :check-interval-hours interval
+                                     :notification-webhook-url (if-not (str/blank? (:webhookUrl form)) (:webhookUrl form) (:notification-webhook-url t))
+                                     :user-notes (if-not (nil? (:userNotes form)) (:userNotes form) (:user-notes t))
+                                     :updated-at (DateTimeOffset/UtcNow))]
+                (task-repo/update-task connection-string updated-t)
+                (let [all-tasks (task-repo/get-all-tasks connection-string)]
+                  {:status 200
+                   :headers {"HX-Trigger" "closeModal"}
+                   :content-type "text/html; charset=utf-8"
+                   :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('タスク設定を更新しました！', true);"))}))))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 10. DELETE /api/tasks/:id
@@ -274,8 +281,9 @@
           (task-repo/delete-task connection-string task-id))
         (let [all-tasks (task-repo/get-all-tasks connection-string)]
           {:status 200
+           :headers {"HX-Trigger" "closeModal"}
            :content-type "text/html; charset=utf-8"
-           :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('タスクを削除しました。', true);"))}))
+           :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('タスクを削除しました。', true);"))}))
 
       ;; 11. POST /api/tasks/:id/run (Immediate Scrape with 409 Conflict Check & headless param)
       (and (= method "POST")
@@ -359,8 +367,9 @@
                       :headless-mode headless}]
         (settings-repo/update-settings connection-string settings)
         {:status 200
+         :headers {"HX-Trigger" "closeModal"}
          :content-type "text/html; charset=utf-8"
-         :body "<script>closeCurrentModal(); showToast('システム設定を保存しました', true);</script>"})
+         :body "<script>showToast('システム設定を保存しました', true);</script>"})
 
       ;; 16. GET /api/logs/modal
       (and (= method "GET") (= path "/api/logs/modal"))

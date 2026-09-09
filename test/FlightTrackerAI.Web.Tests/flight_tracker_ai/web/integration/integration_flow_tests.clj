@@ -31,6 +31,7 @@
       (let [form-body "title=%E3%83%91%E3%83%AA%E6%97%85%E8%A1%8C&origin=HND&destination=CDG&tripType=OneWay&outboundDate=2026-07-01&targetPriceJpy=150000&checkIntervalHours=12"
             res-create (api/handle-api-request conn-str "POST" "/api/tasks" form-body)]
         (is (= 200 (:status res-create)))
+        (is (= "closeModal" (get-in res-create [:headers "HX-Trigger"])))
         (is (str/includes? (:body res-create) "パリ旅行"))
         (is (str/includes? (:body res-create) "HND"))
         (is (str/includes? (:body res-create) "CDG")))

@@ -4,7 +4,8 @@
             [flight-tracker-ai.web.server :as server]
             [clojure.string :as str])
   (:import [System Guid]
-           [System.Net.Http HttpClient]))
+           [System.Net.Http HttpClient StringContent]
+           [System.Text Encoding]))
 
 (defn- create-test-db []
   (let [conn-str (str "Data Source=file:server_db_" (.ToString (Guid/NewGuid) "N") "?mode=memory&cache=shared")]
@@ -39,6 +40,23 @@
           (is (str/includes? body "新規フライト監視タスク登録"))
           (is (str/includes? body "HND"))
           (is (str/includes? body "SIN")))
+        (finally
+          (.Stop listener)
+          (.Close listener))))))
+
+(deftest test-server-returns-custom-headers-on-api
+  (testing "HttpListener server properly propagates custom ASCII headers like HX-Trigger on API responses"
+    (let [conn-str (create-test-db)
+          port "58923"
+          listener (server/start-server conn-str port)
+          client (HttpClient.)]
+      (try
+        (let [content (StringContent. "defaultCheckIntervalHours=24" Encoding/UTF8 "application/x-www-form-urlencoded")
+              resp (.GetResult (.GetAwaiter (.PostAsync client (str "http://localhost:" port "/api/settings") content)))
+              headers (.Headers resp)]
+          (is (= 200 (int (.StatusCode resp))))
+          (is (.Contains headers "HX-Trigger"))
+          (is (= "closeModal" (first (.GetValues headers "HX-Trigger")))))
         (finally
           (.Stop listener)
           (.Close listener))))))

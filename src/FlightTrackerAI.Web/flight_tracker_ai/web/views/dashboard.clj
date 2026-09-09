@@ -21,8 +21,7 @@
     [:button {:type "button"
               :class "bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition inline-flex items-center gap-1.5"
               :hx-get "/api/tasks/new-modal"
-              :hx-target "#modal-container"
-              :onclick "openNewTaskModal()"}
+              :hx-target "#modal-container"}
      [:i {:class "fa-solid fa-plus text-xs"}]
      "タスクを登録する"]
     [:button {:type "button"
@@ -201,7 +200,6 @@
         [:button {:type "button"
                   :hx-get (str "/api/tasks/" (:id task-item) "/modal")
                   :hx-target "#modal-container"
-                  :onclick (str "openEditModal('" (:id task-item) "')")
                   :title "タスク設定変更"
                   :class "p-1.5 hover:text-white hover:bg-slate-800 rounded transition"}
          [:i {:class "fa-solid fa-pen-to-square text-xs"}]]
@@ -264,7 +262,6 @@
        [:button {:type "button"
                  :hx-get (str "/api/tasks/" (:id task-item) "/notes-modal")
                  :hx-target "#modal-container"
-                 :onclick (str "openQuickNoteModal('" (:id task-item) "', '" (str/replace notes-val "'" "\\'") "', '" origin-str " ➔ " dest-str "')")
                  :title "メモを編集"
                  :class "text-slate-400 hover:text-white shrink-0 p-1 hover:bg-slate-800 rounded transition"}
         [:i {:class "fa-solid fa-pen text-xs"}]]]]
@@ -283,7 +280,6 @@
       [:button {:type "button"
                 :hx-get (str "/api/tasks/" (:id task-item) "/detail-modal")
                 :hx-target "#modal-container"
-                :onclick (str "openDetailModal('" (:id task-item) "')")
                 :class "text-xs font-semibold text-sky-400 hover:text-sky-300 flex items-center space-x-1"}
        [:span "所要時間・乗継詳細 & 便比較"]
        [:i {:class "fa-solid fa-chevron-right text-xs"}]]]]))
@@ -393,8 +389,7 @@
            [:td {:class "px-3 py-2.5 max-w-[160px] whitespace-nowrap"}
             [:div {:class "truncate text-[11px] text-slate-300 flex items-center space-x-1 cursor-pointer hover:text-sky-300"
                    :hx-get (str "/api/tasks/" (:id t) "/notes-modal")
-                   :hx-target "#modal-container"
-                   :onclick (str "openQuickNoteModal('" (:id t) "', '" (str/replace notes-val "'" "\\'") "', '" origin-str " ➔ " dest-str "')")}
+                   :hx-target "#modal-container"}
              [:i {:class "fa-solid fa-file-lines text-sky-400 text-xs shrink-0"}]
              [:span {:class "truncate"} (if (str/blank? notes-val) "(メモ追加)" notes-val)]]]
            ;; Last Checked
@@ -409,8 +404,8 @@
              [:i {:class "fa-solid fa-arrows-rotate"}]]
             [:button {:type "button" :onclick (str "triggerImmediateRunWithBrowser('" (:id t) "')") :title "ブラウザ巡回 (手動支援)" :class "text-sky-400 hover:text-sky-300 text-xs p-1"}
              [:i {:class "fa-solid fa-window-restore"}]]
-            [:button {:type "button" :hx-get (str "/api/tasks/" (:id t) "/detail-modal") :hx-target "#modal-container" :onclick (str "openDetailModal('" (:id t) "')") :class "text-sky-400 hover:underline text-xs ml-1"} "詳細"]
-            [:button {:type "button" :hx-get (str "/api/tasks/" (:id t) "/modal") :hx-target "#modal-container" :onclick (str "openEditModal('" (:id t) "')") :class "text-slate-400 hover:underline text-xs ml-1"} "編集"]
+            [:button {:type "button" :hx-get (str "/api/tasks/" (:id t) "/detail-modal") :hx-target "#modal-container" :class "text-sky-400 hover:underline text-xs ml-1"} "詳細"]
+            [:button {:type "button" :hx-get (str "/api/tasks/" (:id t) "/modal") :hx-target "#modal-container" :class "text-slate-400 hover:underline text-xs ml-1"} "編集"]
             [:button {:type "button" :onclick (str "openDeleteModal('" (:id t) "', '" origin-str " ➔ " dest-str "')") :class "text-rose-400 hover:underline text-xs ml-1"} "削除"]]]))]]]])
 
 (defn render-dashboard-content
@@ -573,18 +568,34 @@
          showToast('AI解析用の条件を入力してください', false);
          return;
        }
+       const btn = (typeof event !== 'undefined' && event && event.currentTarget) ? event.currentTarget : null;
+       const origHtml = btn ? btn.innerHTML : '';
+       if (btn) {
+         btn.disabled = true;
+         btn.innerHTML = '<i class=\"fa-solid fa-spinner fa-spin text-xs\"></i><span>AI解析中...</span>';
+       }
        showToast('AI解析を実行中...', true);
        fetch('/api/tasks/new-modal?prompt=' + encodeURIComponent(prompt))
-         .then(r => r.text())
+         .then(async r => {
+           if (!r.ok) throw new Error(await r.text() || `HTTP ${r.status}`);
+           return r.text();
+         })
          .then(html => {
            const container = document.getElementById('modal-container');
            if (container) {
              container.innerHTML = html;
              if (window.htmx) htmx.process(container);
+             if (window.openModalSync) window.openModalSync(true);
            }
          })
          .catch(err => {
            showToast('AI解析に失敗しました: ' + err.message, false);
+         })
+         .finally(() => {
+           if (btn) {
+             btn.disabled = false;
+             btn.innerHTML = origHtml;
+           }
          });
      }
 
@@ -594,54 +605,6 @@
          aiInput.scrollIntoView({ behavior: 'smooth' });
          aiInput.focus();
        }
-     }
-
-     function openQuickNoteModal(taskId, currentNote, title) {
-       fetch('/api/tasks/' + taskId + '/notes-modal')
-         .then(r => r.text())
-         .then(html => {
-           const container = document.getElementById('modal-container');
-           if (container) {
-             container.innerHTML = html;
-             if (window.htmx) htmx.process(container);
-           }
-         });
-     }
-
-     function openDetailModal(taskId) {
-       fetch('/api/tasks/' + taskId + '/detail-modal')
-         .then(r => r.text())
-         .then(html => {
-           const container = document.getElementById('modal-container');
-           if (container) {
-             container.innerHTML = html;
-             if (window.htmx) htmx.process(container);
-           }
-         });
-     }
-
-     function openEditModal(taskId) {
-       fetch('/api/tasks/' + taskId + '/modal')
-         .then(r => r.text())
-         .then(html => {
-           const container = document.getElementById('modal-container');
-           if (container) {
-             container.innerHTML = html;
-             if (window.htmx) htmx.process(container);
-           }
-         });
-     }
-
-     function openNewTaskModal() {
-       fetch('/api/tasks/new-modal')
-         .then(r => r.text())
-         .then(html => {
-           const container = document.getElementById('modal-container');
-           if (container) {
-             container.innerHTML = html;
-             if (window.htmx) htmx.process(container);
-           }
-         });
      }
 
      function openDeleteModal(taskId, routeStr) {

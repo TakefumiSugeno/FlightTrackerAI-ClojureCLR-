@@ -116,5 +116,54 @@
       (is (str/includes? (str html) "お盆シンガポール"))
       (is (str/includes? (str html) "/api/tasks/standalone")))))
 
+(deftest test-render-task-modal-with-validation-error
+  (testing "render-task-modal displays inline error message without losing form inputs"
+    (let [params {:origin "INVALID" :destination "CDG" :title "夏休み旅行"}
+          html (modals/render-task-modal nil params "IATAコードは3文字の英字である必要があります")]
+      (is (str/includes? html "IATAコードは3文字の英字である必要があります"))
+      (is (str/includes? html "INVALID"))
+      (is (str/includes? html "CDG"))
+      (is (str/includes? html "夏休み旅行"))
+      (is (str/includes? html "text-rose-300"))
+      (is (str/includes? html "isFormDirty")))))
+
+(deftest test-render-modals-dirty-guard
+  (testing "input modals have dirty guard logic on backdrop click"
+    (let [task-html (modals/render-task-modal nil {})
+          settings-html (modals/render-settings-modal {})
+          quick-note-html (modals/render-quick-note-modal (Guid/NewGuid) "メモ" "HND ➔ CDG")]
+      (is (str/includes? task-html "isFormDirty"))
+      (is (str/includes? settings-html "isFormDirty"))
+      (is (str/includes? quick-note-html "isFormDirty")))))
+
+(deftest test-render-timeline-modal-has-close-button
+  (testing "render-timeline-modal includes close button in footer"
+    (let [hnd (:ok (domain/create-iata-code "HND"))
+          cdg (:ok (domain/create-iata-code "CDG"))
+          task-item {:id (Guid/NewGuid)
+                     :title "テスト旅行"
+                     :origin hnd
+                     :destination cdg
+                     :trip-type {:kind :one-way :outbound (DateOnly. 2026 5 1)}
+                     :max-stops :direct-only
+                     :preferred-airlines []
+                     :target-price-jpy 100000
+                     :check-interval-hours 12
+                     :notification-webhook-url nil
+                     :user-notes nil
+                     :is-headless true
+                     :status :active
+                     :consecutive-failures 0
+                     :created-at (DateTimeOffset/UtcNow)
+                     :updated-at (DateTimeOffset/UtcNow)
+                     :last-checked-at nil
+                     :last-lowest-price-jpy nil
+                     :last-lowest-airlines nil
+                     :last-lowest-provider nil
+                     :ai-analysis-summary nil}
+          html (modals/render-timeline-modal task-item [] [])]
+      (is (str/includes? html "閉じる"))
+      (is (str/includes? html "closeCurrentModal()")))))
+
 
 

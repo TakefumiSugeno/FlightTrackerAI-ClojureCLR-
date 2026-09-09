@@ -152,3 +152,50 @@
       (is (str/includes? html "今すぐ再試行"))
       (is (str/includes? html "アクセス過密またはBotブロック")))))
 
+(deftest test-dashboard-no-duplicate-hx-and-onclick-modal-calls
+  (testing "dashboard buttons must not have both hx-get and modal-opening onclick attributes"
+    (let [hnd (:ok (domain/create-iata-code "HND"))
+          cdg (:ok (domain/create-iata-code "CDG"))
+          task-item {:id (Guid/NewGuid)
+                     :title "パリ出張"
+                     :origin hnd
+                     :destination cdg
+                     :trip-type {:kind :one-way :outbound (DateOnly. 2026 5 1)}
+                     :max-stops :direct-only
+                     :preferred-airlines []
+                     :target-price-jpy 150000
+                     :check-interval-hours 12
+                     :notification-webhook-url nil
+                     :user-notes "メモテスト"
+                     :is-headless true
+                     :status :active
+                     :consecutive-failures 0
+                     :created-at (DateTimeOffset/UtcNow)
+                     :updated-at (DateTimeOffset/UtcNow)
+                     :last-checked-at nil
+                     :last-lowest-price-jpy 145000
+                     :last-lowest-airlines "AF"
+                     :last-lowest-provider :google-flights
+                     :ai-analysis-summary nil}
+          card-html (h/render-html (dash/render-task-card task-item))
+          list-html (h/render-html (dash/render-list-view [task-item]))
+          empty-html (h/render-html (dash/render-empty-state))
+          dash-html (h/render-html (dash/render-dashboard-content [task-item]))]
+      ;; 1. 空状態ボタン
+      (is (str/includes? empty-html "hx-get=\"/api/tasks/new-modal\""))
+      (is (not (str/includes? empty-html "openNewTaskModal()")))
+      ;; 2. カード内の編集・メモ・詳細ボタン
+      (is (not (str/includes? card-html "openEditModal(")))
+      (is (not (str/includes? card-html "openQuickNoteModal(")))
+      (is (not (str/includes? card-html "openDetailModal(")))
+      ;; 3. リストビュー内の編集・メモ・詳細ボタン
+      (is (not (str/includes? list-html "openEditModal(")))
+      (is (not (str/includes? list-html "openQuickNoteModal(")))
+      (is (not (str/includes? list-html "openDetailModal(")))
+      ;; 4. 正規表現による厳密検証: <button ...> タグ内に hx-get と onclick="open...Modal" が同居していないこと
+      (is (nil? (re-find (re-pattern "<button[^>]*hx-get[^>]*onclick=[\"']open.*Modal") dash-html)))
+      (is (nil? (re-find (re-pattern "<button[^>]*onclick=[\"']open.*Modal[^>]*hx-get") dash-html)))
+      ;; 5. parseWithAI にスピナーと openModalSync が含まれること
+      (is (str/includes? dash-html "openModalSync"))
+      (is (str/includes? dash-html "fa-spinner")))))
+

@@ -22,16 +22,27 @@
     (with-open [reader (StreamReader. stream Encoding/UTF8)]
       (.ReadToEnd reader))))
 
-(defn- write-response [^System.Net.HttpListenerResponse resp status content-type ^String body-str]
-  (try
-    (set! (.StatusCode resp) status)
-    (set! (.ContentType resp) content-type)
-    (let [bytes (.GetBytes Encoding/UTF8 (or body-str ""))
-          output (.OutputStream resp)]
-      (set! (.ContentLength64 resp) (long (count bytes)))
-      (.Write output bytes 0 (count bytes))
-      (.Close output))
-    (catch Exception _ nil)))
+(defn- write-response
+  ([^System.Net.HttpListenerResponse resp status content-type ^String body-str]
+   (write-response resp status content-type body-str nil))
+  ([^System.Net.HttpListenerResponse resp status content-type ^String body-str headers]
+   (try
+     (set! (.StatusCode resp) status)
+     (set! (.ContentType resp) content-type)
+     (when (map? headers)
+       (doseq [[k v] headers]
+         (let [k-str (name k)
+               v-str (str v)]
+           ;; .NET HttpListener headers must be ASCII characters (0x20 to 0x7E)
+           (when (and (re-matches #"^[\x20-\x7E]+$" k-str)
+                      (re-matches #"^[\x20-\x7E]+$" v-str))
+             (.AddHeader resp k-str v-str)))))
+     (let [bytes (.GetBytes Encoding/UTF8 (or body-str ""))
+           output (.OutputStream resp)]
+       (set! (.ContentLength64 resp) (long (count bytes)))
+       (.Write output bytes 0 (count bytes))
+       (.Close output))
+     (catch Exception _ nil))))
 
 (defn handle-request [^String connection-string ^HttpListenerContext ctx]
   (let [req (.Request ctx)
@@ -68,7 +79,7 @@
         ;; API endpoints
         (.StartsWith raw-url "/api/")
         (let [res (api/handle-api-request connection-string method raw-url body-str)]
-          (write-response resp (:status res) (:content-type res) (:body res)))
+          (write-response resp (:status res) (:content-type res) (:body res) (:headers res)))
 
         ;; Static or 404
         :else

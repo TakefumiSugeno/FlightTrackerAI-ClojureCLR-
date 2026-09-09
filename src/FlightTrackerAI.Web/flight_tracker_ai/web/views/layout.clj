@@ -77,6 +77,17 @@
 
       ;; Client-Side Scripts
       [:script (h/raw "
+        // --- Modal & Navigation State Machine ---
+        window.__modalState = {
+          isOpen: false,
+          isNavigatingBack: false
+        };
+
+        // Initialize / Sanitize zombie modal hash on load
+        if (window.location.hash === '#modal') {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+
         function showToast(message, isSuccess = true) {
           const container = document.getElementById('toastContainer');
           if (!container) return;
@@ -86,19 +97,87 @@
           container.appendChild(toast);
           setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 5000);
         }
+        window.showToast = showToast;
 
-        function closeCurrentModal() {
+        function isFormDirty(form) {
+          if (!form) return false;
+          for (const el of form.elements) {
+            if (el.type === 'submit' || el.type === 'button' || el.type === 'hidden') continue;
+            if (el.type === 'checkbox' || el.type === 'radio') {
+              if (el.checked !== el.defaultChecked) return true;
+            } else {
+              if (el.value !== el.defaultValue) return true;
+            }
+          }
+          return false;
+        }
+        window.isFormDirty = isFormDirty;
+
+        function openModalSync(pushHistory = true) {
+          document.body.classList.add('overflow-hidden');
+          if (!window.__modalState.isOpen) {
+            window.__modalState.isOpen = true;
+            if (pushHistory) {
+              history.pushState({ modalOpen: true }, '', '#modal');
+            }
+          } else if (pushHistory) {
+            history.replaceState({ modalOpen: true }, '', '#modal');
+          }
+        }
+        window.openModalSync = openModalSync;
+
+        function closeCurrentModal(syncHistory = true) {
+          // Remove scroll lock
+          document.body.classList.remove('overflow-hidden');
+
+          // Clean DOM
           const container = document.getElementById('modal-container');
           if (container) container.innerHTML = '';
           document.querySelectorAll('#active-modal, #quickNoteModal, #timelineModal, .modal-backdrop-clickable').forEach(function(el) {
             el.remove();
           });
+
+          // Sync History API if opened via UI
+          if (window.__modalState.isOpen) {
+            window.__modalState.isOpen = false;
+            if (syncHistory && !window.__modalState.isNavigatingBack) {
+              if (window.location.hash === '#modal' || (history.state && history.state.modalOpen)) {
+                history.back();
+              }
+            }
+          }
         }
         window.closeCurrentModal = closeCurrentModal;
 
+        // Popstate handler for browser back/forward buttons
+        window.addEventListener('popstate', function(e) {
+          if (window.__modalState.isOpen) {
+            window.__modalState.isNavigatingBack = true;
+            closeCurrentModal(false);
+            window.__modalState.isNavigatingBack = false;
+          }
+        });
+
+        // ESC key handler with IME composition guard
         window.addEventListener('keydown', function(e) {
-          if (e.key === 'Escape' || e.key === 'Esc') {
-            closeCurrentModal();
+          if ((e.key === 'Escape' || e.key === 'Esc') && !e.isComposing && e.keyCode !== 229) {
+            closeCurrentModal(true);
+          }
+        });
+
+        // HTMX trigger handler for closeModal
+        document.body.addEventListener('closeModal', function() {
+          closeCurrentModal(true);
+        });
+
+        // HTMX afterSwap handler to detect modal injection
+        document.body.addEventListener('htmx:afterSwap', function(e) {
+          const target = e.detail.target;
+          if (target && target.id === 'modal-container') {
+            const hasModal = target.querySelector('#active-modal, #quickNoteModal, #timelineModal, .modal-backdrop-clickable');
+            if (hasModal) {
+              openModalSync(true);
+            }
           }
         });
 
@@ -114,110 +193,5 @@
           }
           textarea.focus();
         }
-
-        function parseWithAI() {
-          const textarea = document.getElementById('aiInput');
-          const prompt = textarea ? textarea.value.trim() : '';
-          if (!prompt) {
-            showToast('AI解析するテキストを入力してください。', false);
-            return;
-          }
-          const newTab = window.open('about:blank', '_blank');
-          if (newTab) {
-            newTab.document.write(`
-              <!DOCTYPE html>
-              <html lang=\"ja\" class=\"dark\">
-              <head>
-                <meta charset=\"UTF-8\">
-                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-                <title>AI解析中... • FlightTrackerAI</title>
-                <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />
-                <script src=\"https://cdn.tailwindcss.com\"><\\/script>
-                <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css\">
-              </head>
-              <body class=\"bg-slate-950 text-slate-100 flex items-center justify-center min-h-screen font-sans p-4\">
-                <div class=\"text-center space-y-5 max-w-md p-8 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-sm\">
-                  <div class=\"relative w-20 h-20 mx-auto flex items-center justify-center\">
-                    <div class=\"absolute inset-0 rounded-full border-4 border-sky-500/20 border-t-sky-400 animate-spin\"></div>
-                    <i class=\"fa-solid fa-plane text-xl text-sky-400 animate-pulse\"></i>
-                  </div>
-                  <div class=\"space-y-2\">
-                    <h3 class=\"font-bold text-white text-base\">AI 解析を実行中...</h3>
-                    <p class=\"text-xs text-slate-400 leading-relaxed\">自然言語プロンプトからフライト条件を抽出しています。<br>解析完了後、自動的に登録画面へ遷移します。</p>
-                  </div>
-                  <div class=\"inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-[11px] text-slate-400 font-mono\">
-                    <span class=\"w-2 h-2 rounded-full bg-sky-400 animate-ping\"></span>
-                    <span>OpenRouter LLM 解析処理中</span>
-                  </div>
-                </div>
-              </body>
-              </html>
-            `);
-            newTab.document.close();
-          }
-          showToast('AI解析を実行中...（新規タブで準備中）', true);
-          fetch('/api/ai/parse', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ prompt: prompt })
-          })
-          .then(async r => {
-            if (!r.ok) {
-              let errText = await r.text();
-              try {
-                const errObj = JSON.parse(errText);
-                if (errObj && errObj.error) errText = errObj.error;
-              } catch(e) {}
-              throw new Error(errText || `HTTP ${r.status}`);
-            }
-            return r.json();
-          })
-          .then(data => {
-            const origin = data.origin || data.Origin || '';
-            const destination = data.destination || data.Destination || '';
-            const outboundDate = data.outboundDate || data.OutboundDate || '';
-            const inboundDate = data.inboundDate || data.InboundDate || '';
-            const tripType = data.tripType || data.TripType || 'RoundTrip';
-            const maxStops = data.maxStops || data.MaxStops || 'Any';
-            const maxPrice = data.maxPriceJpy || data.MaxPriceJpy || '';
-            const notes = data.notes || data.Notes || '';
-
-            const params = new URLSearchParams();
-            if (origin) params.append('origin', origin);
-            if (destination) params.append('destination', destination);
-            if (outboundDate) params.append('outboundDate', outboundDate);
-            if (inboundDate) params.append('inboundDate', inboundDate);
-            if (tripType) params.append('tripType', tripType);
-            if (maxStops) params.append('maxStops', maxStops);
-            if (maxPrice) params.append('maxPriceJpy', maxPrice);
-            if (notes) params.append('notes', notes);
-
-            const newTabUrl = '/tasks/new?' + params.toString();
-            if (newTab && !newTab.closed) {
-              newTab.location.href = newTabUrl;
-            } else {
-              window.open(newTabUrl, '_blank');
-            }
-            showToast('AI解析完了: 別画面（新規タブ）に登録画面を開きました！', true);
-          })
-          .catch(err => {
-            if (newTab && !newTab.closed) {
-              const sanitizedMsg = (err.message || 'エラーが発生しました').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              newTab.document.body.innerHTML = `
-                <div class=\"text-center space-y-4 max-w-md p-8 bg-slate-900/90 border border-rose-500/30 rounded-2xl shadow-2xl\">
-                  <div class=\"w-16 h-16 mx-auto rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-2xl\">
-                    <i class=\"fa-solid fa-triangle-exclamation\"></i>
-                  </div>
-                  <div class=\"space-y-1\">
-                    <h3 class=\"font-bold text-white text-base\">AI解析に失敗しました</h3>
-                    <p class=\"text-xs text-rose-300 leading-relaxed\">${sanitizedMsg}</p>
-                  </div>
-                  <p class=\"text-[11px] text-slate-400\">元の画面でプロンプト内容をご確認・修正の上、再試行してください。</p>
-                  <button onclick=\"window.close()\" class=\"px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg font-medium transition\">このタブを閉じる</button>
-                </div>
-              `;
-            }
-            showToast(err.message, false);
-          });
-        }
+        window.insertTemplate = insertTemplate;
       ")]]]))

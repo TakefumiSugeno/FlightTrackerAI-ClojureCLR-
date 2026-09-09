@@ -5,28 +5,32 @@
             [clojure.string :as str])
   (:import [System DateTimeOffset TimeSpan DateOnly]))
 
-(defn- modal-backdrop [title-str content]
-  [:div {:id "active-modal"
-         :class "modal-backdrop-clickable fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
-         :onclick "if (event.target === this) closeCurrentModal();"}
-   [:div {:class "bg-slate-950 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-800 text-slate-100 cursor-default"
-          :onclick "event.stopPropagation();"}
-    [:div {:class "px-6 py-4 border-b border-slate-800 bg-slate-900 flex items-center justify-between"}
-     [:h3 {:class "text-sm font-bold text-white flex items-center gap-2"}
-      [:i {:class "fa-solid fa-circle-plus text-sky-400"}]
-      title-str]
-     [:button {:type "button"
-               :class "text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-               :onclick "closeCurrentModal()"}
-      [:i {:class "fa-solid fa-xmark text-base"}]]]
-    [:div {:class "p-6 overflow-y-auto space-y-4 flex-1"}
-     content]]])
+(defn- modal-backdrop
+  ([title-str content] (modal-backdrop title-str content false))
+  ([title-str content is-input-form]
+   [:div {:id "active-modal"
+          :class "modal-backdrop-clickable fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
+          :onclick (if is-input-form
+                     "if (event.target === this) { const form = this.querySelector('form'); if (!window.isFormDirty || !window.isFormDirty(form)) { closeCurrentModal(); } else { if (confirm('入力内容が変更されています。破棄して閉じますか？')) closeCurrentModal(); } }"
+                     "if (event.target === this) closeCurrentModal();")}
+    [:div {:class "bg-slate-950 rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-800 text-slate-100 cursor-default"
+           :onclick "event.stopPropagation();"}
+     [:div {:class "px-6 py-4 border-b border-slate-800 bg-slate-900 flex items-center justify-between"}
+      [:h3 {:class "text-sm font-bold text-white flex items-center gap-2"}
+       [:i {:class "fa-solid fa-circle-plus text-sky-400"}]
+       title-str]
+      [:button {:type "button"
+                :class "text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                :onclick "closeCurrentModal()"}
+       [:i {:class "fa-solid fa-xmark text-base"}]]]
+     [:div {:class "p-6 overflow-y-auto space-y-4 flex-1"}
+      content]]]))
 
 (defn render-quick-note-modal [task-id current-note route-title]
   (h/render-html
     [:div {:id "quickNoteModal"
            :class "modal-backdrop-clickable fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm cursor-pointer"
-           :onclick "if (event.target === this) closeCurrentModal();"}
+           :onclick "if (event.target === this) { const form = this.querySelector('form'); if (!window.isFormDirty || !window.isFormDirty(form)) { closeCurrentModal(); } else { if (confirm('入力内容が変更されています。破棄して閉じますか？')) closeCurrentModal(); } }"}
      [:div {:class "bg-slate-950 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 text-slate-100 cursor-default"
             :onclick "event.stopPropagation();"}
       [:div {:class "flex items-center justify-between border-b border-slate-800 pb-3"}
@@ -61,98 +65,105 @@
                   :class "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold transition"}
          "メモを保存"]]]]]))
 
-(defn render-task-modal [task-opt initial-params]
-  (let [is-edit (some? task-opt)
-        title (if is-edit "タスク設定の変更" "新規フライト監視タスク登録")
-        origin-val (or (when task-opt (domain/iata-code-value (:origin task-opt)))
-                       (:origin initial-params) "")
-        dest-val (or (when task-opt (domain/iata-code-value (:destination task-opt)))
-                     (:destination initial-params) "")
-        task-title (or (when task-opt (:title task-opt))
-                       (:title initial-params) "")
-        outbound-val (or (when task-opt
+(defn render-task-modal
+  ([task-opt initial-params] (render-task-modal task-opt initial-params nil))
+  ([task-opt initial-params error-msg]
+   (let [is-edit (some? task-opt)
+         title (if is-edit "タスク設定の変更" "新規フライト監視タスク登録")
+         origin-val (or (when task-opt (domain/iata-code-value (:origin task-opt)))
+                        (:origin initial-params) "")
+         dest-val (or (when task-opt (domain/iata-code-value (:destination task-opt)))
+                      (:destination initial-params) "")
+         task-title (or (when task-opt (:title task-opt))
+                        (:title initial-params) "")
+         outbound-val (or (when task-opt
+                            (let [trip (:trip-type task-opt)]
+                              (when (:outbound trip) (.ToString ^DateOnly (:outbound trip) "yyyy-MM-dd"))))
+                          (:outboundDate initial-params) "")
+         inbound-val (or (when task-opt
                            (let [trip (:trip-type task-opt)]
-                             (when (:outbound trip) (.ToString ^DateOnly (:outbound trip) "yyyy-MM-dd"))))
-                         (:outboundDate initial-params) "")
-        inbound-val (or (when task-opt
-                          (let [trip (:trip-type task-opt)]
-                            (when (:inbound trip) (.ToString ^DateOnly (:inbound trip) "yyyy-MM-dd"))))
-                        (:inboundDate initial-params) "")
-        target-price-val (or (when task-opt (:target-price-jpy task-opt))
-                             (:targetPriceJpy initial-params) "")
-        check-interval-val (or (when task-opt (:check-interval-hours task-opt))
-                               (:checkIntervalHours initial-params) 12)
-        webhook-url-val (or (when task-opt (:notification-webhook-url task-opt))
-                            (:webhookUrl initial-params) "")
-        notes-val (or (when task-opt (:user-notes task-opt))
-                      (:notes initial-params) "")]
-    (h/render-html
-      (modal-backdrop
-        title
-        [:form {:hx-post (if is-edit (str "/api/tasks/" (:id task-opt)) "/api/tasks")
-                :hx-target "#dashboard-container"
-                :hx-swap "outerHTML"
-                :class "space-y-4"}
-         [:div
-          [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "タスク名"]
-          [:input {:type "text" :name "title" :value task-title :required true
-                   :placeholder "例: GW パリ往復"
-                   :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]
-
-         [:div {:class "grid grid-cols-2 gap-3"}
+                             (when (:inbound trip) (.ToString ^DateOnly (:inbound trip) "yyyy-MM-dd"))))
+                         (:inboundDate initial-params) "")
+         target-price-val (or (when task-opt (:target-price-jpy task-opt))
+                              (:targetPriceJpy initial-params) "")
+         check-interval-val (or (when task-opt (:check-interval-hours task-opt))
+                                (:checkIntervalHours initial-params) 12)
+         webhook-url-val (or (when task-opt (:notification-webhook-url task-opt))
+                             (:webhookUrl initial-params) "")
+         notes-val (or (when task-opt (:user-notes task-opt))
+                       (:notes initial-params) "")]
+     (h/render-html
+       (modal-backdrop
+         title
+         [:form {:hx-post (if is-edit (str "/api/tasks/" (:id task-opt)) "/api/tasks")
+                 :hx-target "#dashboard-container"
+                 :hx-swap "outerHTML"
+                 :class "space-y-4"}
+          (when (and error-msg (not (str/blank? error-msg)))
+            [:div {:class "p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 text-xs text-rose-300 flex items-center gap-2"}
+             [:i {:class "fa-solid fa-circle-exclamation text-rose-400"}]
+             [:span error-msg]])
           [:div
-           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "出発地 (IATA)"]
-           [:input {:type "text" :name "origin" :value origin-val :required true
-                    :placeholder "HND"
-                    :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-sky-500"}]]
-          [:div
-           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "目的地 (IATA)"]
-           [:input {:type "text" :name "destination" :value dest-val :required true
-                    :placeholder "CDG"
-                    :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-sky-500"}]]]
-
-         [:div {:class "grid grid-cols-2 gap-3"}
-          [:div
-           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "往路出発日"]
-           [:input {:type "date" :name "outboundDate" :value outbound-val :required true
+           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "タスク名"]
+           [:input {:type "text" :name "title" :value task-title :required true
+                    :placeholder "例: GW パリ往復"
                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]
-          [:div
-           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "復路出発日 (往復時)"]
-           [:input {:type "date" :name "inboundDate" :value inbound-val
-                    :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]]
 
-         [:div {:class "grid grid-cols-2 gap-3"}
+          [:div {:class "grid grid-cols-2 gap-3"}
+           [:div
+            [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "出発地 (IATA)"]
+            [:input {:type "text" :name "origin" :value origin-val :required true
+                     :placeholder "HND"
+                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-sky-500"}]]
+           [:div
+            [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "目的地 (IATA)"]
+            [:input {:type "text" :name "destination" :value dest-val :required true
+                     :placeholder "CDG"
+                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-sky-500"}]]]
+
+          [:div {:class "grid grid-cols-2 gap-3"}
+           [:div
+            [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "往路出発日"]
+            [:input {:type "date" :name "outboundDate" :value outbound-val :required true
+                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]
+           [:div
+            [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "復路出発日 (往復時)"]
+            [:input {:type "date" :name "inboundDate" :value inbound-val
+                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]]
+
+          [:div {:class "grid grid-cols-2 gap-3"}
+           [:div
+            [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "目標価格 (JPY)"]
+            [:input {:type "number" :name "targetPriceJpy" :value (str target-price-val)
+                     :placeholder "150000"
+                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]
+           [:div
+            [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "巡回間隔 (時間)"]
+            [:input {:type "number" :name "checkIntervalHours" :value (str check-interval-val) :min "1" :max "168"
+                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]]
+
           [:div
-           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "目標価格 (JPY)"]
-           [:input {:type "number" :name "targetPriceJpy" :value (str target-price-val)
-                    :placeholder "150000"
+           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "個別 Webhook URL (任意)"]
+           [:input {:type "url" :name "webhookUrl" :value webhook-url-val
+                    :placeholder "https://discord.com/api/webhooks/..."
                     :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]
+
           [:div
-           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "巡回間隔 (時間)"]
-           [:input {:type "number" :name "checkIntervalHours" :value (str check-interval-val) :min "1" :max "168"
-                    :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]]
+           [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "ユーザーメモ・要望"]
+           [:textarea {:name "userNotes" :rows "2"
+                       :placeholder "羽田発直行便希望、ANA優先"
+                       :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}
+            notes-val]]
 
-         [:div
-          [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "個別 Webhook URL (任意)"]
-          [:input {:type "url" :name "webhookUrl" :value webhook-url-val
-                   :placeholder "https://discord.com/api/webhooks/..."
-                   :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}]]
-
-         [:div
-          [:label {:class "block text-xs font-medium text-slate-300 mb-1"} "ユーザーメモ・要望"]
-          [:textarea {:name "userNotes" :rows "2"
-                      :placeholder "羽田発直行便希望、ANA優先"
-                      :class "w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"}
-           notes-val]]
-
-         [:div {:class "flex justify-end gap-2 pt-2 border-t border-slate-900"}
-          [:button {:type "button"
-                    :onclick "closeCurrentModal()"
-                    :class "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg font-medium transition"}
-           "キャンセル"]
-          [:button {:type "submit"
-                    :class "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded-lg font-semibold transition"}
-           (if is-edit "更新する" "登録する")]]]))))
+          [:div {:class "flex justify-end gap-2 pt-2 border-t border-slate-900"}
+           [:button {:type "button"
+                     :onclick "closeCurrentModal()"
+                     :class "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg font-medium transition"}
+            "キャンセル"]
+           [:button {:type "submit"
+                     :class "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded-lg font-semibold transition"}
+            (if is-edit "更新する" "登録する")]]]
+         true)))))
 
 (defn render-settings-modal [settings]
   (h/render-html
@@ -203,7 +214,8 @@
          "閉じる"]
         [:button {:type "submit"
                   :class "px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded-lg font-semibold transition"}
-         "設定を保存"]]])))
+         "設定を保存"]]]
+      true)))
 
 (defn render-timeline-modal [task-item latest-offers history]
   (let [trip (:trip-type task-item)

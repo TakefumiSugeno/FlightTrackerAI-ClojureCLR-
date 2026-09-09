@@ -49,14 +49,33 @@
       (is (str/includes? (:body res) "新規フライト監視タスク登録")))))
 
 (deftest test-post-tasks-and-delete
-  (testing "POST /api/tasks creates task and returns dashboard HTML, and DELETE removes it"
+  (testing "POST /api/tasks creates task and returns dashboard HTML with HX-Trigger, and DELETE removes it with HX-Trigger"
     (let [conn-str (create-test-db)
           form-body "title=API%E3%83%86%E3%82%B9%E3%83%88&origin=HND&destination=CDG&tripType=OneWay&outboundDate=2026-06-01&targetPriceJpy=120000"
           res (api/handle-api-request conn-str "POST" "/api/tasks" form-body)]
       (is (= 200 (:status res)))
+      (is (= "closeModal" (get-in res [:headers "HX-Trigger"])))
       (is (str/includes? (:body res) "APIテスト"))
       (is (str/includes? (:body res) "HND"))
-      (is (str/includes? (:body res) "CDG")))))
+      (is (str/includes? (:body res) "CDG"))
+      (let [tasks (task-repo/get-all-tasks conn-str)
+            task-id (:id (first tasks))
+            del-res (api/handle-api-request conn-str "DELETE" (str "/api/tasks/" task-id) nil)]
+        (is (= 200 (:status del-res)))
+        (is (= "closeModal" (get-in del-res [:headers "HX-Trigger"])))
+        (is (= 0 (count (task-repo/get-all-tasks conn-str))))))))
+
+(deftest test-post-tasks-validation-error-keeps-modal
+  (testing "POST /api/tasks with invalid IATA returns modal HTML with error message and without closeModal trigger"
+    (let [conn-str (create-test-db)
+          form-body "title=%E3%82%A8%E3%83%A9%E3%83%BC%E3%83%86%E3%82%B9%E3%83%88&origin=INVALID&destination=CDG&tripType=OneWay&outboundDate=2026-06-01"
+          res (api/handle-api-request conn-str "POST" "/api/tasks" form-body)]
+      (is (= 200 (:status res)))
+      (is (nil? (get-in res [:headers "HX-Trigger"])))
+      (is (str/includes? (:body res) "英字3文字である必要があります"))
+      (is (str/includes? (:body res) "INVALID"))
+      (is (str/includes? (:body res) "CDG"))
+      (is (str/includes? (:body res) "エラーテスト")))))
 
 (deftest test-get-settings-modal-and-post
   (testing "GET /api/settings/modal returns settings form, and POST updates it"
@@ -67,7 +86,8 @@
 
       (let [post-body "defaultCheckIntervalHours=6&enableGoogleFlights=1&enableSkyscanner=1"
             res-post (api/handle-api-request conn-str "POST" "/api/settings" post-body)]
-        (is (= 200 (:status res-post)))))))
+        (is (= 200 (:status res-post)))
+        (is (= "closeModal" (get-in res-post [:headers "HX-Trigger"])))))))
 
 (deftest test-edit-and-quick-note-modal
   (testing "GET /api/tasks/:id/edit-modal and /api/tasks/:id/quick-note-modal return correct modals"
@@ -91,6 +111,7 @@
           res (api/handle-api-request conn-str "PATCH" (str "/api/tasks/" task-id "/notes") form-body)
           updated-task (task-repo/get-task-by-id conn-str task-id)]
       (is (= 200 (:status res)))
+      (is (= "closeModal" (get-in res [:headers "HX-Trigger"])))
       (is (= "更新されたメモ" (:user-notes updated-task))))))
 
 (deftest test-task-history-and-detail
