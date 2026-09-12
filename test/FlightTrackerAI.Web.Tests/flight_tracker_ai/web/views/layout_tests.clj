@@ -21,17 +21,13 @@
       (is (str/includes? res "insertTemplate")))))
 
 (deftest test-base-layout-modal-and-esc-handlers
-  (testing "base-layout includes state machine, history sync, dirty check, and Escape key listener with IME guard"
+  (testing "base-layout includes closeCurrentModal, showToast, parseWithAI, and modal container"
     (let [res (layout/base-layout "テスト" [:div "テスト"])]
-      (is (str/includes? res "window.__modalState"))
       (is (str/includes? res "closeCurrentModal"))
-      (is (str/includes? res "window.closeCurrentModal = closeCurrentModal"))
-      (is (str/includes? res "isFormDirty"))
-      (is (str/includes? res "openModalSync"))
-      (is (str/includes? res "popstate"))
-      (is (str/includes? res "isComposing"))
+      (is (str/includes? res "showToast"))
+      (is (str/includes? res "parseWithAI"))
       (is (str/includes? res "closeModal"))
-      (is (str/includes? res "htmx:afterSwap"))
-      (is (str/includes? res "overflow-hidden"))
+      (is (str/includes? res "font-awesome"))
+      (is (str/includes? res "toastContainer"))
       (is (str/includes? res "modal-container")))))
 

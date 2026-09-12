@@ -13,7 +13,7 @@
             [flight-tracker-ai.core.domain :as domain]
             [flight-tracker-ai.core.dto :as dto]
             [clojure.string :as str])
-  (:import [System Guid DateTimeOffset DateOnly Uri SystemException]
+  (:import [System Guid DateTime DateTimeOffset DateOnly Uri TimeSpan]
            [System.Net.Http HttpClient]))
 
 (defn parse-query-string [^String raw-query]
@@ -37,17 +37,13 @@
     ""
     (let [trimmed (str/trim s)]
       (cond
-        ;; ちょうど3文字の英字
         (re-matches #"(?i)^[A-Za-z]{3}$" trimmed)
         (.ToUpperInvariant trimmed)
 
-        ;; "HND - 東京(羽田)" や "HND (羽田)" のように、先頭が3文字英字で区切り文字が続く場合
         (re-matches #"(?i)^([A-Za-z]{3})[\s\-–—/(].*" trimmed)
         (let [code (second (re-find #"(?i)^([A-Za-z]{3})" trimmed))]
           (.ToUpperInvariant code))
 
-        ;; それ以外 (例: "INVALID", "BADORIGIN", "123", "AB") はそのまま返し、
-        ;; 後続の domain/create-iata-code の厳格バリデーションに委ねる
         :else trimmed))))
 
 (defn- extract-prompt [^String body-str form]
@@ -56,20 +52,34 @@
     (when-let [m (re-find #"(?i)\"prompt\"\s*:\s*\"((?:\\\"|[^\"])*)\"" (or body-str ""))]
       (.. (second m) (Replace "\\\"" "\"") (Replace "\\n" "\n")))))
 
+(defn- render-with-modal-close [dashboard-node msg]
+  [:div
+   dashboard-node
+   [:script (h/raw (str "closeCurrentModal(); showToast('" msg "', true);"))]])
+
 (defn handle-api-request [^String connection-string ^String method ^String raw-url ^String body-str]
   (let [uri (Uri. (str "http://localhost" raw-url))
         path (.AbsolutePath uri)
         query (parse-query-string (.Query uri))
         form (when body-str (parse-form-data body-str))]
     (cond
-      ;; 1. GET /api/tasks/new-modal
+      ;; 1. GET /api/tasks/view (HTMX 部分置換: コントロールバーやステータス変更用)
+      (and (= method "GET") (= path "/api/tasks/view"))
+      (let [mode (or (:mode query) "card")
+            status (or (:status query) "all")
+            q-str (or (:query query) "")
+            all-tasks (task-repo/get-all-tasks connection-string)]
+        {:status 200
+         :content-type "text/html; charset=utf-8"
+         :body (h/render-html (dash/render-dashboard all-tasks mode status q-str))})
+
+      ;; 2. GET /api/tasks/new-modal
       (and (= method "GET") (= path "/api/tasks/new-modal"))
       (let [prompt (:prompt query)]
         (if (and prompt (not (str/blank? prompt)))
-          ;; AI 解析付き登録モーダル
           (let [settings (settings-repo/get-settings connection-string)
                 client (HttpClient.)
-                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (DateOnly/FromDateTime System.DateTime/UtcNow))
+                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (DateOnly/FromDateTime DateTime/UtcNow))
                 params (if (:ok ai-res)
                          {:origin (:Origin (:ok ai-res))
                           :destination (:Destination (:ok ai-res))
@@ -81,57 +91,57 @@
                          {:notes prompt})]
             {:status 200
              :content-type "text/html; charset=utf-8"
-             :body (modals/render-task-modal nil params)})
+             :body (h/render-html (modals/render-task-modal nil params))})
           {:status 200
            :content-type "text/html; charset=utf-8"
-           :body (modals/render-task-modal nil {})}))
+           :body (h/render-html (modals/render-task-modal nil {}))}))
 
-      ;; 2. GET /api/tasks/:id/edit-modal or /api/tasks/:id/modal
+      ;; 3. GET /api/tasks/:id/modal (編集モーダル)
       (and (= method "GET")
            (.StartsWith path "/api/tasks/")
-           (or (.EndsWith path "/edit-modal") (.EndsWith path "/modal")))
+           (or (.EndsWith path "/modal") (.EndsWith path "/edit-modal")))
       (let [parts (str/split path #"/")
             id-str (nth parts 3)
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
           {:status 200
            :content-type "text/html; charset=utf-8"
-           :body (modals/render-task-modal t {})}
+           :body (h/render-html (modals/render-task-modal t {}))}
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
-      ;; 3. GET /api/tasks/:id/quick-note-modal or /api/tasks/:id/notes-modal
+      ;; 4. GET /api/tasks/:id/notes-modal (メモ編集モーダル)
       (and (= method "GET")
            (.StartsWith path "/api/tasks/")
-           (or (.EndsWith path "/quick-note-modal") (.EndsWith path "/notes-modal")))
+           (or (.EndsWith path "/notes-modal") (.EndsWith path "/quick-note-modal")))
       (let [parts (str/split path #"/")
             id-str (nth parts 3)
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
-          (let [origin-str (domain/iata-code-value (:origin t))
-                dest-str (domain/iata-code-value (:destination t))]
-            {:status 200
-             :content-type "text/html; charset=utf-8"
-             :body (modals/render-quick-note-modal task-id (:user-notes t) (str origin-str " ➔ " dest-str))})
+          {:status 200
+           :content-type "text/html; charset=utf-8"
+           :body (h/render-html (modals/render-notes-modal t))}
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
-      ;; 4. PATCH /api/tasks/:id/notes (or POST)
-      (and (or (= method "PATCH") (= method "POST"))
+      ;; 5. POST or PATCH /api/tasks/:id/notes (メモ更新)
+      (and (or (= method "POST") (= method "PATCH"))
            (.StartsWith path "/api/tasks/")
            (.EndsWith path "/notes"))
       (let [parts (str/split path #"/")
             id-str (nth parts 3)
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
-          (let [updated-t (assoc t :user-notes (or (:notes form) "") :updated-at (DateTimeOffset/UtcNow))]
+          (let [notes-text (or (:userNotes form) (:notes form) "")
+                updated-t (assoc t :user-notes notes-text :updated-at (DateTimeOffset/UtcNow))]
             (task-repo/update-task connection-string updated-t)
-            (let [all-tasks (task-repo/get-all-tasks connection-string)]
+            (let [all-tasks (task-repo/get-all-tasks connection-string)
+                  node (dash/render-dashboard all-tasks "card" "all" "")]
               {:status 200
                :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('ユーザーメモを更新しました！', true);") [1 :hx-swap-oob] "outerHTML"))}))
+               :body (h/render-html (render-with-modal-close node "メモを保存しました！"))}))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
-      ;; 5. POST /api/tasks/:id/toggle-status
+      ;; 6. POST /api/tasks/:id/toggle-status (ステータストグル)
       (and (= method "POST")
            (.StartsWith path "/api/tasks/")
            (.EndsWith path "/toggle-status"))
@@ -143,36 +153,16 @@
                 updated-t (assoc t :status new-status :updated-at (DateTimeOffset/UtcNow))]
             (task-repo/update-task connection-string updated-t)
             (let [all-tasks (task-repo/get-all-tasks connection-string)
-                  msg (if (= new-status :paused) "タスクの巡回を一時停止しました。" "タスクの巡回を再開しました！")]
+                  msg (if (= new-status :paused) "タスクの巡回を一時停止しました。" "タスクの巡回を再開しました！")
+                  node (dash/render-dashboard all-tasks "card" "all" "")]
               {:status 200
+               :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks (str "showToast('" msg "', true);")))}))
+               :body (h/render-html (render-with-modal-close node msg))}))
+
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
-      ;; 6. GET /api/tasks/view (HTML fragment for HTMX)
-      (and (= method "GET") (= path "/api/tasks/view"))
-      (let [all-tasks (task-repo/get-all-tasks connection-string)]
-        {:status 200
-         :content-type "text/html; charset=utf-8"
-         :body (h/render-html (dash/render-dashboard-content all-tasks))})
-
-      ;; 6.5. GET /api/tasks/:id/delete-modal
-      (and (= method "GET")
-           (.StartsWith path "/api/tasks/")
-           (.EndsWith path "/delete-modal"))
-      (let [parts (str/split path #"/")
-            id-str (nth parts 3)
-            task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
-        (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
-          (let [origin-str (domain/iata-code-value (:origin t))
-                dest-str (domain/iata-code-value (:destination t))
-                route-str (str origin-str " ➔ " dest-str " (" (:title t) ")")]
-            {:status 200
-             :content-type "text/html; charset=utf-8"
-             :body (modals/render-delete-modal task-id route-str)})
-          {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
-
-      ;; 7. POST /api/tasks (Create Task via Modal)
+      ;; 7. POST /api/tasks (新規作成)
       (and (= method "POST") (= path "/api/tasks"))
       (let [clean-origin (extract-iata-code (:origin form))
             clean-dest (extract-iata-code (:destination form))
@@ -181,23 +171,19 @@
         (if (or (:error origin-res) (:error dest-res))
           {:status 200
            :content-type "text/html; charset=utf-8"
-           :body (modals/render-task-modal nil form (or (:error origin-res) (:error dest-res)))}
+           :body (h/render-html (modals/render-task-modal nil form (or (:error origin-res) (:error dest-res))))}
           (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
-                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime System.DateTime/UtcNow)))
+                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime DateTime/UtcNow)))
                 inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
-                trip (if is-round {:kind :round-trip :outbound outbound :inbound inbound} {:kind :one-way :outbound outbound})
+                trip (if is-round {:kind :round-trip :outbound-date outbound :inbound-date inbound} {:kind :one-way :outbound-date outbound})
                 target-price (when-not (str/blank? (:targetPriceJpy form))
                                (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
                 settings (settings-repo/get-settings connection-string)
-                interval-raw (or (:checkIntervalHours form) "default")
-                interval (if (= interval-raw "default")
-                           (:default-check-interval-hours settings)
-                           (try (long (read-string interval-raw)) (catch Exception _ 12)))
-                max-stops (cond
-                            (= (:maxStops form) "DirectOnly") :direct-only
-                            (= (:maxStops form) "1") :one-stop
-                            :else :any-stops)
-                preferred-str (or (:preferredAirlines form) "")
+                interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
+                max-stops (case (:maxStops form)
+                            "DirectOnly" :direct-only
+                            "OneStop" :one-stop
+                            :any-stops)
                 now (DateTimeOffset/UtcNow)
                 task-title (if-not (str/blank? (:title form))
                              (:title form)
@@ -208,29 +194,31 @@
                            :destination (:ok dest-res)
                            :trip-type trip
                            :max-stops max-stops
-                           :preferred-airlines (if (str/blank? preferred-str) [] (mapv str/trim (str/split preferred-str #",")))
+                           :preferred-airlines []
                            :target-price-jpy target-price
                            :check-interval-hours interval
                            :notification-webhook-url (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
                            :user-notes (when-not (str/blank? (:userNotes form)) (:userNotes form))
-                           :is-headless true
+                           :is-headless (not= (:showBrowser form) "true")
                            :status :active
                            :consecutive-failures 0
                            :created-at now
                            :updated-at now
                            :last-checked-at nil
                            :last-lowest-price-jpy nil
-                           :last-lowest-airlines (if (str/blank? preferred-str) nil preferred-str)
+                           :last-lowest-airlines nil
                            :last-lowest-provider nil
                            :ai-analysis-summary nil}]
             (task-repo/create-task connection-string task-item)
-            (let [all-tasks (task-repo/get-all-tasks connection-string)]
+            (let [all-tasks (task-repo/get-all-tasks connection-string)
+                  node (dash/render-dashboard all-tasks "card" "all" "")]
               {:status 200
                :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('新規タスクを登録しました！', true);") [1 :hx-swap-oob] "outerHTML"))}))))
+               :body (h/render-html (render-with-modal-close node "新規タスクを登録しました！"))}))))
 
-      ;; 8. POST /api/tasks/standalone (Create Task via Standalone Page)
+
+      ;; 8. POST /api/tasks/standalone (スタンドアロン登録画面用)
       (and (= method "POST") (= path "/api/tasks/standalone"))
       (let [clean-origin (extract-iata-code (:origin form))
             clean-dest (extract-iata-code (:destination form))
@@ -241,22 +229,22 @@
            :content-type "text/html; charset=utf-8"
            :body (str "<p class='text-rose-400'>エラー: " (or (:error origin-res) (:error dest-res)) "</p>")}
           (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
-                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime System.DateTime/UtcNow)))
+                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime DateTime/UtcNow)))
                 inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
-                trip (if is-round {:kind :round-trip :outbound outbound :inbound inbound} {:kind :one-way :outbound outbound})
+                trip (if is-round {:kind :round-trip :outbound-date outbound :inbound-date inbound} {:kind :one-way :outbound-date outbound})
                 target-price (when-not (str/blank? (:targetPriceJpy form))
                                (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
                 interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
                 now (DateTimeOffset/UtcNow)
                 task-item {:id (Guid/NewGuid)
-                           :title (or (:title form) (str (:ok origin-res) " ➔ " (:ok dest-res)))
+                           :title (if-not (str/blank? (:title form)) (:title form) (str (:ok origin-res) " ➔ " (:ok dest-res)))
                            :origin (:ok origin-res)
                            :destination (:ok dest-res)
                            :trip-type trip
-                           :max-stops (cond
-                                        (= (:maxStops form) "DirectOnly") :direct-only
-                                        (= (:maxStops form) "OneStop") :one-stop
-                                        :else :any-stops)
+                           :max-stops (case (:maxStops form)
+                                        "DirectOnly" :direct-only
+                                        "OneStop" :one-stop
+                                        :any-stops)
                            :preferred-airlines []
                            :target-price-jpy target-price
                            :check-interval-hours interval
@@ -277,15 +265,12 @@
              :content-type "text/html; charset=utf-8"
              :body "<script>window.location.href='/';</script>"})))
 
-      ;; 9. POST /api/tasks/:id (Update Task)
+      ;; 9. POST /api/tasks/:id (タスク更新)
       (and (= method "POST")
            (not (.Contains path "/run"))
            (not (.Contains path "/retry"))
            (not (.Contains path "/notes"))
-           (not (.Contains path "/new-modal"))
-           (not (.Contains path "/edit-modal"))
            (not (.Contains path "/modal"))
-           (not (.Contains path "/delete-modal"))
            (not (.Contains path "/toggle-status"))
            (not (.Contains path "/standalone"))
            (not (= path "/api/tasks"))
@@ -302,34 +287,28 @@
             (if (or (:error origin-res) (:error dest-res))
               {:status 200
                :content-type "text/html; charset=utf-8"
-               :body (modals/render-task-modal t form (or (:error origin-res) (:error dest-res)))}
+               :body (h/render-html (modals/render-task-modal t form (or (:error origin-res) (:error dest-res))))}
               (let [target-price (if-not (str/blank? (:targetPriceJpy form))
                                    (try (long (read-string (:targetPriceJpy form))) (catch Exception _ (:target-price-jpy t)))
                                    (:target-price-jpy t))
-                    settings (settings-repo/get-settings connection-string)
-                    interval-raw (or (:checkIntervalHours form) (str (:check-interval-hours t)))
-                    interval (if (= interval-raw "default")
-                               (:default-check-interval-hours settings)
-                               (try (long (read-string interval-raw)) (catch Exception _ (:check-interval-hours t))))
-                    preferred-str (:preferredAirlines form)
+                    interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ (:check-interval-hours t)))
                     updated-t (assoc t
                                      :title (or (:title form) (:title t))
                                      :origin (:ok origin-res)
                                      :destination (:ok dest-res)
                                      :target-price-jpy target-price
                                      :check-interval-hours interval
-                                     :preferred-airlines (if preferred-str
-                                                           (if (str/blank? preferred-str) [] (mapv str/trim (str/split preferred-str #",")))
-                                                           (:preferred-airlines t))
                                      :notification-webhook-url (if-not (str/blank? (:webhookUrl form)) (:webhookUrl form) (:notification-webhook-url t))
                                      :user-notes (if-not (nil? (:userNotes form)) (:userNotes form) (:user-notes t))
+                                     :is-headless (if (some? (:showBrowser form)) (not= (:showBrowser form) "true") (:is-headless t))
                                      :updated-at (DateTimeOffset/UtcNow))]
                 (task-repo/update-task connection-string updated-t)
-                (let [all-tasks (task-repo/get-all-tasks connection-string)]
+                (let [all-tasks (task-repo/get-all-tasks connection-string)
+                      node (dash/render-dashboard all-tasks "card" "all" "")]
                   {:status 200
                    :headers {"HX-Trigger" "closeModal"}
                    :content-type "text/html; charset=utf-8"
-                   :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('タスク設定を更新しました！', true);") [1 :hx-swap-oob] "outerHTML"))}))))
+                   :body (h/render-html (render-with-modal-close node "タスク設定を更新しました！"))}))))
           {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 10. DELETE /api/tasks/:id
@@ -338,13 +317,14 @@
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (when task-id
           (task-repo/delete-task connection-string task-id))
-        (let [all-tasks (task-repo/get-all-tasks connection-string)]
+        (let [all-tasks (task-repo/get-all-tasks connection-string)
+              node (dash/render-dashboard all-tasks "card" "all" "")]
           {:status 200
            :headers {"HX-Trigger" "closeModal"}
            :content-type "text/html; charset=utf-8"
-           :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('タスクを削除しました。', true);") [1 :hx-swap-oob] "outerHTML"))}))
+           :body (h/render-html (render-with-modal-close node "タスクを削除しました。"))}))
 
-      ;; 11. POST /api/tasks/:id/run (Immediate Scrape with 409 Conflict Check & headless param)
+      ;; 11. POST /api/tasks/:id/run (即時巡回 - ヘッドレス / ブラウザ表示支援)
       (and (= method "POST")
            (.StartsWith path "/api/tasks/")
            (or (.Contains path "/run") (.Contains path "/retry")))
@@ -365,12 +345,15 @@
                     settings (if-not is-headless (assoc base-settings :headless-mode false) base-settings)
                     client (HttpClient.)]
                 (worker/execute-task-scraping client connection-string active-t settings)))
-            (let [all-tasks (task-repo/get-all-tasks connection-string)]
+            (let [all-tasks (task-repo/get-all-tasks connection-string)
+                  msg (if is-headless "即時巡回が完了しました！" "ブラウザ表示巡回が完了しました！")
+                  node (dash/render-dashboard all-tasks "card" "all" "")]
               {:status 200
+               :headers {"HX-Trigger" "closeModal"}
                :content-type "text/html; charset=utf-8"
-               :body (h/render-html (dash/render-dashboard-content all-tasks "closeCurrentModal(); showToast('巡回が完了しました。', true);"))}))))
+               :body (h/render-html (render-with-modal-close node msg))}))))
 
-      ;; 12. GET /api/tasks/:id/detail or /api/tasks/:id/detail-modal
+      ;; 12. GET /api/tasks/:id/detail-modal or /detail
       (and (= method "GET")
            (.StartsWith path "/api/tasks/")
            (or (.EndsWith path "/detail") (.EndsWith path "/detail-modal")))
@@ -378,16 +361,13 @@
             id-str (nth parts 3)
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
-          (let [latest (flight-repo/get-latest-offers-for-task connection-string task-id 10)
-                history (flight-repo/get-price-history connection-string task-id)]
+          (let [latest (flight-repo/get-latest-offers-for-task connection-string task-id 10)]
             {:status 200
              :content-type "text/html; charset=utf-8"
-             :body (modals/render-timeline-modal t latest history)})
-          {:status 404
-           :content-type "text/plain; charset=utf-8"
-           :body "Task not found"}))
+             :body (h/render-html (modals/render-detail-modal t latest))})
+          {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
-      ;; 13. GET /api/tasks/:id/history (History JSON)
+      ;; 13. GET /api/tasks/:id/history (Chart.js 用 JSON API)
       (and (= method "GET")
            (.StartsWith path "/api/tasks/")
            (.EndsWith path "/history"))
@@ -395,29 +375,33 @@
             id-str (nth parts 3)
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if task-id
-          (let [history (flight-repo/get-price-history connection-string task-id)]
+          (let [history (flight-repo/get-price-history connection-string task-id)
+                labels (mapv (fn [h]
+                               (if-let [cap (:captured-at h)]
+                                 (.ToString (.ToOffset ^DateTimeOffset cap (TimeSpan/FromHours 9.0)) "MM/dd HH:mm")
+                                 ""))
+                             history)
+                prices (mapv #(or (:lowest-price-jpy %) 0) history)]
             {:status 200
              :content-type "application/json; charset=utf-8"
-             :body (dto/to-json (or history []))})
-          {:status 404
-           :content-type "text/plain; charset=utf-8"
-           :body "Task not found"}))
+             :body (dto/to-json {:labels labels :prices prices})})
+          {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
 
       ;; 14. GET /api/settings/modal
       (and (= method "GET") (= path "/api/settings/modal"))
       (let [settings (settings-repo/get-settings connection-string)]
         {:status 200
          :content-type "text/html; charset=utf-8"
-         :body (modals/render-settings-modal settings)})
+         :body (h/render-html (modals/render-settings-modal settings))})
 
       ;; 15. POST /api/settings
       (and (= method "POST") (= path "/api/settings"))
       (let [interval (try (long (read-string (or (:defaultCheckIntervalHours form) "12"))) (catch Exception _ 12))
             webhook-url (when-not (str/blank? (:defaultWebhookUrl form)) (:defaultWebhookUrl form))
             api-key (when-not (str/blank? (:openRouterApiKey form)) (:openRouterApiKey form))
-            enable-gf (= (:enableGoogleFlights form) "1")
-            enable-ss (= (:enableSkyscanner form) "1")
-            headless (= (:headlessMode form) "1")
+            enable-gf (or (= (:enableGoogleFlights form) "true") (= (:enableGoogleFlights form) "1"))
+            enable-ss (or (= (:enableSkyscanner form) "true") (= (:enableSkyscanner form) "1"))
+            headless (not= (:showBrowser form) "true")
             settings {:default-check-interval-hours interval
                       :default-webhook-url webhook-url
                       :openrouter-api-key api-key
@@ -425,10 +409,13 @@
                       :enable-skyscanner enable-ss
                       :headless-mode headless}]
         (settings-repo/update-settings connection-string settings)
-        {:status 200
-         :headers {"HX-Trigger" "closeModal"}
-         :content-type "text/html; charset=utf-8"
-         :body "<script>showToast('システム設定を保存しました', true);</script>"})
+        (let [all-tasks (task-repo/get-all-tasks connection-string)
+              node (dash/render-dashboard all-tasks "card" "all" "")]
+          {:status 200
+           :headers {"HX-Trigger" "closeModal"}
+           :content-type "text/html; charset=utf-8"
+           :body (h/render-html (render-with-modal-close node "システム設定を保存しました！"))}))
+
 
       ;; 16. GET /api/logs/modal
       (and (= method "GET") (= path "/api/logs/modal"))
@@ -436,7 +423,7 @@
             log-path (logger/get-log-file-path)]
         {:status 200
          :content-type "text/html; charset=utf-8"
-         :body (modals/render-logs-modal logs log-path)})
+         :body (h/render-html (modals/render-logs-modal logs log-path))})
 
       ;; 17. GET /api/logs/text
       (and (= method "GET") (= path "/api/logs/text"))
@@ -445,28 +432,26 @@
          :content-type "text/plain; charset=utf-8"
          :body (str/join "\n" logs)})
 
-      ;; 18. POST /api/ai/parse
+      ;; 18. POST /api/ai/parse (JSON API: OpenRouter 解析結果返却)
       (and (= method "POST") (= path "/api/ai/parse"))
       (let [prompt (extract-prompt body-str form)]
         (if (str/blank? prompt)
           {:status 400
            :content-type "application/json; charset=utf-8"
-           :body "{\"error\":\"Prompt is required\"}"}
+           :body "{\"error\":\"プロンプトを入力してください。\"}"}
           (let [settings (settings-repo/get-settings connection-string)
                 client (HttpClient.)
-                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (DateOnly/FromDateTime System.DateTime/UtcNow))]
+                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (DateOnly/FromDateTime DateTime/UtcNow))]
             (if (:ok ai-res)
               {:status 200
                :content-type "application/json; charset=utf-8"
                :body (dto/to-json (:ok ai-res))}
-              {:status 200
+              {:status 400
                :content-type "application/json; charset=utf-8"
-               :body (dto/to-json {:Origin "" :Destination "" :TripType "RoundTrip" :OutboundDate "" :InboundDate "" :MaxStops "Any" :MaxPriceJpy nil :Notes prompt})}))))
+               :body (dto/to-json {:error (or (:error ai-res) "AI解析に失敗しました。")})}))))
 
       ;; Default: 404
       :else
       {:status 404
        :content-type "text/plain; charset=utf-8"
        :body "Endpoint not found"})))
-
-

@@ -3,6 +3,7 @@
             [flight-tracker-ai.infrastructure.database :as db]
             [flight-tracker-ai.infrastructure.task-repository :as task-repo]
             [flight-tracker-ai.infrastructure.scraper-common :as scraper-common]
+            [flight-tracker-ai.infrastructure.ai-client :as ai]
             [flight-tracker-ai.core.domain :as domain]
             [flight-tracker-ai.web.controllers.api-controller :as api]
             [clojure.string :as str])
@@ -125,7 +126,7 @@
           updated (task-repo/get-task-by-id conn-str task-id)]
       (is (= 200 (:status res-ok)))
       (is (= "closeModal" (get-in res-ok [:headers "HX-Trigger"])))
-      (is (str/includes? (:body res-ok) "hx-swap-oob=\"outerHTML\""))
+      (is (str/includes? (:body res-ok) "closeCurrentModal()"))
       (is (= "更新後タスク" (:title updated)))
       (is (= 150000 (:target-price-jpy updated)))
       (is (= 6 (:check-interval-hours updated)))
@@ -189,11 +190,17 @@
 
 (deftest test-ai-parse-endpoint
   (testing "POST /api/ai/parse returns JSON with parsed or fallback fields"
-    (let [conn-str (create-test-db)
-          res (api/handle-api-request conn-str "POST" "/api/ai/parse" "{\"prompt\":\"東京からパリ往復\"}")]
-      (is (= 200 (:status res)))
-      (is (= "application/json; charset=utf-8" (:content-type res)))
-      (is (str/includes? (:body res) "TripType")))
+    (let [conn-str (create-test-db)]
+      (with-redefs [ai/parse-flight-query (fn [_ _ _ _]
+                                            {:ok {:origin "HND"
+                                                  :destination "CDG"
+                                                  :trip-type "RoundTrip"
+                                                  :outbound-date "2026-05-01"
+                                                  :inbound-date "2026-05-08"}})]
+        (let [res (api/handle-api-request conn-str "POST" "/api/ai/parse" "{\"prompt\":\"東京からパリ往復\"}")]
+          (is (= 200 (:status res)))
+          (is (= "application/json; charset=utf-8" (:content-type res)))
+          (is (str/includes? (:body res) "RoundTrip")))))
     (let [conn-str (create-test-db)
           err-res (api/handle-api-request conn-str "POST" "/api/ai/parse" "{\"prompt\":\"\"}")]
       (is (= 400 (:status err-res))))))

@@ -37,7 +37,9 @@
       ""
       (let [tag (name (first node))
             rest-items (rest node)
-            has-attrs (and (seq rest-items) (map? (first rest-items)))
+            has-attrs (and (seq rest-items) 
+                           (map? (first rest-items)) 
+                           (not (contains? (first rest-items) :raw)))
             attrs (if has-attrs (first rest-items) {})
             children (if has-attrs (rest rest-items) rest-items)
             void-tags #{"area" "base" "br" "col" "embed" "hr" "img" "input" "link" "meta" "param" "source" "track" "wbr"}]

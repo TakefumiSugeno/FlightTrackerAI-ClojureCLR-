@@ -15,4 +15,15 @@
 
   (testing "render-html supports void tags without closing slash/tag"
     (let [res (h/render-html [:input {:type "text" :name "query"}])]
-      (is (= "<input type=\"text\" name=\"query\">" res)))))
+      (is (= "<input type=\"text\" name=\"query\">" res))))
+
+  (testing "render-html renders raw content inside script and style tags as body, not attributes"
+    (let [res1 (h/render-html [:script (h/raw "console.log('run');")])
+          res2 (h/render-html [:script {:type "text/javascript"} (h/raw "alert(1);")])
+          res3 (h/render-html [:style (h/raw ".btn { color: red; }")])
+          res4 (h/render-html [:div (h/raw "<span>raw</span>")])]
+      (is (= "<script>console.log('run');</script>" res1))
+      (is (= "<script type=\"text/javascript\">alert(1);</script>" res2))
+      (is (= "<style>.btn { color: red; }</style>" res3))
+      (is (= "<div><span>raw</span></div>" res4))))
+)

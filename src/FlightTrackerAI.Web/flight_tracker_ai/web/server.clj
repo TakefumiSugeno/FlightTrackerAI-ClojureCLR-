@@ -70,6 +70,11 @@
               full-html (layout/base-layout "新規タスク登録" content)]
           (write-response resp 200 "text/html; charset=utf-8" full-html))
 
+        ;; POST /tasks/new -> redirect or handle as standalone
+        (and (= method "POST") (.StartsWith raw-url "/tasks/new"))
+        (let [res (api/handle-api-request connection-string "POST" "/api/tasks/standalone" body-str)]
+          (write-response resp (:status res) (:content-type res) (:body res) (:headers res)))
+
         ;; Favicon
         (and (= method "GET") (= raw-url "/favicon.svg"))
         (let [candidates ["wwwroot/favicon.svg"
