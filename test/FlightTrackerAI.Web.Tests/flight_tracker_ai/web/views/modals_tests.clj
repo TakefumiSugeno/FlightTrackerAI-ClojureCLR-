@@ -24,7 +24,7 @@
                     :enable-skyscanner true
                     :headless-mode true}
           html (modals/render-settings-modal settings)]
-      (is (str/includes? html "全体システム設定"))
+      (is (str/includes? html "システム全体設定"))
       (is (str/includes? html "https://discord.com/webhook"))
       (is (str/includes? html "sk-or-v1")))))
 

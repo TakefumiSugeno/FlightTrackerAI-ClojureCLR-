@@ -74,5 +74,5 @@
             ;; 5. Check Dashboard UI shows Target Achieved Badge
             (let [reloaded-tasks (task-repo/get-all-tasks conn-str)
                   dashboard-html (h/render-html (dash/render-dashboard-content reloaded-tasks))]
-              (is (str/includes? dashboard-html "🎯 目標達成"))
+              (is (str/includes? dashboard-html "目標達成"))
               (is (str/includes? dashboard-html "¥142,000")))))))))

@@ -32,6 +32,24 @@
 (defn- parse-form-data [^String body-str]
   (parse-query-string body-str))
 
+(defn extract-iata-code [^String s]
+  (if (str/blank? s)
+    ""
+    (let [trimmed (str/trim s)]
+      (cond
+        ;; ちょうど3文字の英字
+        (re-matches #"(?i)^[A-Za-z]{3}$" trimmed)
+        (.ToUpperInvariant trimmed)
+
+        ;; "HND - 東京(羽田)" や "HND (羽田)" のように、先頭が3文字英字で区切り文字が続く場合
+        (re-matches #"(?i)^([A-Za-z]{3})[\s\-–—/(].*" trimmed)
+        (let [code (second (re-find #"(?i)^([A-Za-z]{3})" trimmed))]
+          (.ToUpperInvariant code))
+
+        ;; それ以外 (例: "INVALID", "BADORIGIN", "123", "AB") はそのまま返し、
+        ;; 後続の domain/create-iata-code の厳格バリデーションに委ねる
+        :else trimmed))))
+
 (defn- extract-prompt [^String body-str form]
   (if-let [p (:prompt form)]
     p
@@ -138,10 +156,28 @@
          :content-type "text/html; charset=utf-8"
          :body (h/render-html (dash/render-dashboard-content all-tasks))})
 
+      ;; 6.5. GET /api/tasks/:id/delete-modal
+      (and (= method "GET")
+           (.StartsWith path "/api/tasks/")
+           (.EndsWith path "/delete-modal"))
+      (let [parts (str/split path #"/")
+            id-str (nth parts 3)
+            task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
+        (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
+          (let [origin-str (domain/iata-code-value (:origin t))
+                dest-str (domain/iata-code-value (:destination t))
+                route-str (str origin-str " ➔ " dest-str " (" (:title t) ")")]
+            {:status 200
+             :content-type "text/html; charset=utf-8"
+             :body (modals/render-delete-modal task-id route-str)})
+          {:status 404 :content-type "text/plain; charset=utf-8" :body "Task not found"}))
+
       ;; 7. POST /api/tasks (Create Task via Modal)
       (and (= method "POST") (= path "/api/tasks"))
-      (let [origin-res (domain/create-iata-code (:origin form))
-            dest-res (domain/create-iata-code (:destination form))]
+      (let [clean-origin (extract-iata-code (:origin form))
+            clean-dest (extract-iata-code (:destination form))
+            origin-res (domain/create-iata-code clean-origin)
+            dest-res (domain/create-iata-code clean-dest)]
         (if (or (:error origin-res) (:error dest-res))
           {:status 200
            :content-type "text/html; charset=utf-8"
@@ -152,15 +188,27 @@
                 trip (if is-round {:kind :round-trip :outbound outbound :inbound inbound} {:kind :one-way :outbound outbound})
                 target-price (when-not (str/blank? (:targetPriceJpy form))
                                (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
-                interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
+                settings (settings-repo/get-settings connection-string)
+                interval-raw (or (:checkIntervalHours form) "default")
+                interval (if (= interval-raw "default")
+                           (:default-check-interval-hours settings)
+                           (try (long (read-string interval-raw)) (catch Exception _ 12)))
+                max-stops (cond
+                            (= (:maxStops form) "DirectOnly") :direct-only
+                            (= (:maxStops form) "1") :one-stop
+                            :else :any-stops)
+                preferred-str (or (:preferredAirlines form) "")
                 now (DateTimeOffset/UtcNow)
+                task-title (if-not (str/blank? (:title form))
+                             (:title form)
+                             (str (:ok origin-res) " ➔ " (:ok dest-res)))
                 task-item {:id (Guid/NewGuid)
-                           :title (or (:title form) "新規タスク")
+                           :title task-title
                            :origin (:ok origin-res)
                            :destination (:ok dest-res)
                            :trip-type trip
-                           :max-stops :any-stops
-                           :preferred-airlines []
+                           :max-stops max-stops
+                           :preferred-airlines (if (str/blank? preferred-str) [] (mapv str/trim (str/split preferred-str #",")))
                            :target-price-jpy target-price
                            :check-interval-hours interval
                            :notification-webhook-url (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
@@ -172,7 +220,7 @@
                            :updated-at now
                            :last-checked-at nil
                            :last-lowest-price-jpy nil
-                           :last-lowest-airlines nil
+                           :last-lowest-airlines (if (str/blank? preferred-str) nil preferred-str)
                            :last-lowest-provider nil
                            :ai-analysis-summary nil}]
             (task-repo/create-task connection-string task-item)
@@ -184,8 +232,10 @@
 
       ;; 8. POST /api/tasks/standalone (Create Task via Standalone Page)
       (and (= method "POST") (= path "/api/tasks/standalone"))
-      (let [origin-res (domain/create-iata-code (:origin form))
-            dest-res (domain/create-iata-code (:destination form))]
+      (let [clean-origin (extract-iata-code (:origin form))
+            clean-dest (extract-iata-code (:destination form))
+            origin-res (domain/create-iata-code clean-origin)
+            dest-res (domain/create-iata-code clean-dest)]
         (if (or (:error origin-res) (:error dest-res))
           {:status 400
            :content-type "text/html; charset=utf-8"
@@ -199,7 +249,7 @@
                 interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
                 now (DateTimeOffset/UtcNow)
                 task-item {:id (Guid/NewGuid)
-                           :title (or (:title form) "新規タスク")
+                           :title (or (:title form) (str (:ok origin-res) " ➔ " (:ok dest-res)))
                            :origin (:ok origin-res)
                            :destination (:ok dest-res)
                            :trip-type trip
@@ -235,6 +285,7 @@
            (not (.Contains path "/new-modal"))
            (not (.Contains path "/edit-modal"))
            (not (.Contains path "/modal"))
+           (not (.Contains path "/delete-modal"))
            (not (.Contains path "/toggle-status"))
            (not (.Contains path "/standalone"))
            (not (= path "/api/tasks"))
@@ -244,8 +295,10 @@
       (let [id-str (subs path (count "/api/tasks/"))
             task-id (try (Guid/Parse id-str) (catch Exception _ nil))]
         (if-let [t (and task-id (task-repo/get-task-by-id connection-string task-id))]
-          (let [origin-res (if (:origin form) (domain/create-iata-code (:origin form)) {:ok (:origin t)})
-                dest-res (if (:destination form) (domain/create-iata-code (:destination form)) {:ok (:destination t)})]
+          (let [clean-origin (when (:origin form) (extract-iata-code (:origin form)))
+                clean-dest (when (:destination form) (extract-iata-code (:destination form)))
+                origin-res (if clean-origin (domain/create-iata-code clean-origin) {:ok (:origin t)})
+                dest-res (if clean-dest (domain/create-iata-code clean-dest) {:ok (:destination t)})]
             (if (or (:error origin-res) (:error dest-res))
               {:status 200
                :content-type "text/html; charset=utf-8"
@@ -253,15 +306,21 @@
               (let [target-price (if-not (str/blank? (:targetPriceJpy form))
                                    (try (long (read-string (:targetPriceJpy form))) (catch Exception _ (:target-price-jpy t)))
                                    (:target-price-jpy t))
-                    interval (if-not (str/blank? (:checkIntervalHours form))
-                               (try (long (read-string (:checkIntervalHours form))) (catch Exception _ (:check-interval-hours t)))
-                               (:check-interval-hours t))
+                    settings (settings-repo/get-settings connection-string)
+                    interval-raw (or (:checkIntervalHours form) (str (:check-interval-hours t)))
+                    interval (if (= interval-raw "default")
+                               (:default-check-interval-hours settings)
+                               (try (long (read-string interval-raw)) (catch Exception _ (:check-interval-hours t))))
+                    preferred-str (:preferredAirlines form)
                     updated-t (assoc t
                                      :title (or (:title form) (:title t))
                                      :origin (:ok origin-res)
                                      :destination (:ok dest-res)
                                      :target-price-jpy target-price
                                      :check-interval-hours interval
+                                     :preferred-airlines (if preferred-str
+                                                           (if (str/blank? preferred-str) [] (mapv str/trim (str/split preferred-str #",")))
+                                                           (:preferred-airlines t))
                                      :notification-webhook-url (if-not (str/blank? (:webhookUrl form)) (:webhookUrl form) (:notification-webhook-url t))
                                      :user-notes (if-not (nil? (:userNotes form)) (:userNotes form) (:user-notes t))
                                      :updated-at (DateTimeOffset/UtcNow))]
@@ -283,7 +342,7 @@
           {:status 200
            :headers {"HX-Trigger" "closeModal"}
            :content-type "text/html; charset=utf-8"
-           :body (h/render-html (dash/render-dashboard-content all-tasks "showToast('タスクを削除しました。', true);"))}))
+           :body (h/render-html (assoc-in (dash/render-dashboard-content all-tasks "showToast('タスクを削除しました。', true);") [1 :hx-swap-oob] "outerHTML"))}))
 
       ;; 11. POST /api/tasks/:id/run (Immediate Scrape with 409 Conflict Check & headless param)
       (and (= method "POST")

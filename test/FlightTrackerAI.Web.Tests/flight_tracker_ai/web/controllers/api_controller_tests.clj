@@ -82,7 +82,7 @@
     (let [conn-str (create-test-db)
           res-modal (api/handle-api-request conn-str "GET" "/api/settings/modal" nil)]
       (is (= 200 (:status res-modal)))
-      (is (str/includes? (:body res-modal) "全体システム設定"))
+      (is (str/includes? (:body res-modal) "システム全体設定"))
 
       (let [post-body "defaultCheckIntervalHours=6&enableGoogleFlights=1&enableSkyscanner=1"
             res-post (api/handle-api-request conn-str "POST" "/api/settings" post-body)]

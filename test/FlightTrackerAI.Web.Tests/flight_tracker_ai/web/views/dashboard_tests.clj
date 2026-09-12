@@ -45,10 +45,10 @@
       (is (str/includes? html "HND"))
       (is (str/includes? html "CDG"))
       (is (str/includes? html "¥148,000"))
-      (is (str/includes? html "🎯 目標達成"))
-      (is (str/includes? html "toggleTaskStatus"))
-      (is (str/includes? html "triggerImmediateRunWithBrowser"))
-      (is (str/includes? html "fa-window-restore"))
+      (is (str/includes? html "目標達成"))
+      (is (str/includes? html "check-circle"))
+      (is (str/includes? html "triggerImmediateRun"))
+      (is (str/includes? html "delete-modal"))
       (is (str/includes? html "羽田直行希望")))))
 
 (deftest test-render-manual-challenge-banner
@@ -115,9 +115,9 @@
       (is (str/includes? html "パリ出張"))
       (is (str/includes? html "HND"))
       (is (str/includes? html "CDG"))
-      (is (str/includes? html "fa-arrow-right"))
+      (is (str/includes? html "arrow-right"))
       (is (str/includes? html "¥145,000"))
-      (is (str/includes? html "🎯 目標達成")))))
+      (is (str/includes? html "目標達成")))))
 
 
 
@@ -149,8 +149,9 @@
                        :ai-analysis-summary "一時的なアクセス過密またはBotブロックが検知されました。"}
           html (h/render-html (dash/render-task-card failed-task))]
       (is (str/includes? html "失敗タスク"))
-      (is (str/includes? html "今すぐ再試行"))
-      (is (str/includes? html "アクセス過密またはBotブロック")))))
+      (is (str/includes? html "エラー"))
+      (is (str/includes? html "alert-circle"))
+      (is (str/includes? html "triggerImmediateRun")))))
 
 (deftest test-dashboard-no-duplicate-hx-and-onclick-modal-calls
   (testing "dashboard buttons must not have both hx-get and modal-opening onclick attributes"
@@ -197,5 +198,6 @@
       (is (nil? (re-find (re-pattern "<button[^>]*onclick=[\"']open.*Modal[^>]*hx-get") dash-html)))
       ;; 5. parseWithAI にスピナーと openModalSync が含まれること
       (is (str/includes? dash-html "openModalSync"))
-      (is (str/includes? dash-html "fa-spinner")))))
+      (is (str/includes? dash-html "animate-spin"))
+      (is (str/includes? dash-html "loader-2")))))
 

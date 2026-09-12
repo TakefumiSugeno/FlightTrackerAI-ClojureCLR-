@@ -80,13 +80,13 @@
   - `doc/spec.md`, `doc/design_detail.md` にモック準拠のUI仕様（Lucideアイコン、Excel風フィルタ、モーダル構成、削除モーダル等）を反映。
   - 「ユーザー」「SE/PG」ロールによるドキュメントレビュー実施、合意取得。
   - コミット: `docs: 仕様・詳細設計策定 [UIのmock完全準拠化]`
-- [ ] **WI-03: 基盤レイアウト・Tailwind設定・Lucide Icons 移行 (Step 3, TDD)**
+- [x] **WI-03: 基盤レイアウト・Tailwind設定・Lucide Icons 移行 (Step 3, TDD)**
   - `layout.clj`:
     - Tailwind 設定（`skyline` パレット）を追加。
     - `Lucide Icons` CDN の導入と FontAwesome の全廃・置換。
     - HTMX swap 後および動的要素挿入時に自動で `lucide.createIcons()` を呼び出すグローバルハンドラーの導入。
     - ヘッダーをモックと完全一致（ロゴ、テキスト、ワーカーバッジ、全体設定ボタン、新規登録ボタン）。※ログ確認モーダルへの導線はモック全体の景観を損ねない適切な配置（フッターまたは全体設定内）へ調整。
-- [ ] **WI-04: 新規タスク登録・タスク編集モーダルのモック完全準拠化 (Step 3, TDD)**
+- [x] **WI-04: 新規タスク登録・タスク編集モーダルのモック完全準拠化 (Step 3, TDD)**
   - `modals.clj` & `api_controller.clj`:
     - 往復/片道のトグルスイッチUIおよび復路入力欄の表示/非表示連動。
     - `<datalist id="airportsList">` による主要空港サジェスト（都市名・空港名・IATAコード）。
@@ -96,24 +96,24 @@
     - 「デフォルトの Discord Webhook に通知する」チェックボックス。
     - モックと同一のクラス名・パディング・ボタン配置・Lucideアイコン。
     - 編集モーダル (`#editModal`) も同様にモック仕様へ刷新。
-- [ ] **WI-05: 削除確認モーダル (`#deleteModal`) の実装 (Step 3, TDD)**
+- [x] **WI-05: 削除確認モーダル (`#deleteModal`) の実装 (Step 3, TDD)**
   - ブラウザネイティブ `confirm()` を廃止し、モック準拠の `#deleteModal` UI を実装。
   - 削除対象タスクのルート名・注意文言を表示し、安全に削除処理（DELETE API）を実行。
-- [ ] **WI-06: Excel風一覧リスト (`#listView`) のインタラクティブフィルタ・ソート実装 (Step 3, TDD)**
+- [x] **WI-06: Excel風一覧リスト (`#listView`) のインタラクティブフィルタ・ソート実装 (Step 3, TDD)**
   - `dashboard.clj`:
     - ステータス列・区間列・最安航空会社列に Excel 風ドロップダウンフィルタボタンを設置。
     - クライアントサイド JS によるリアルタイム複合フィルタリングロジック。
     - 価格列の昇順/降順ソート機能。
     - アクティブフィルタチップスバー（`chipStatus`, `chipAirline`, `chipRoute`）の完全同期。
-- [ ] **WI-07: カードビュー (`#cardsView`) および詳細モーダル (`#detailModal`) のモック一致化 (Step 3, TDD)**
+- [x] **WI-07: カードビュー (`#cardsView`) および詳細モーダル (`#detailModal`) のモック一致化 (Step 3, TDD)**
   - カードビューのレイアウト、バッジ、Lucideアイコン、アクションボタンをモックと一致。
   - 詳細モーダルのタイムライン（セグメント階層カード、乗継情報、航空会社バッジ）の視覚的再現。
   - チャートの期間選択タブ (3日/7日/14日/全期間) およびデザインの洗練。
-- [ ] **WI-08: 全体設定モーダル (`#settingsModal`) のモック完全準拠化 (Step 3, TDD)**
+- [x] **WI-08: 全体設定モーダル (`#settingsModal`) のモック完全準拠化 (Step 3, TDD)**
   - セレクト式デフォルト間隔、Webhook URL & テスト送信、プロバイダー有効化チェックボックス等、モックと完全に一致。
-- [ ] **WI-09: 単体・結合テストの更新・実行・全件合格検証 (Step 3, TDD)**
+- [x] **WI-09: 単体・結合テストの更新・実行・全件合格検証 (Step 3, TDD)**
   - `layout_tests.clj`, `dashboard_tests.clj`, `modals_tests.clj`, `api_controller_tests.clj` 等のテストを改修後のUIに合わせて更新。
-  - `./scripts/test.ps1` を実行し、全テスト合格（OK）およびカバレッジ 80% 以上を確認。
+  - `./scripts/test.ps1` を実行し、全テスト合格（OK: 453, NG: 0）およびカバレッジ 94.9%（目標 80% 以上達成）を確認。
   - `doc/work/TestResults/TestResults.html` および `doc/work/CoverageReport/index.html` を出力。
 - [ ] **WI-10: ドキュメント事後同期 & 成果物レビュー・コミット (Step 4)**
   - 実装後の仕様書・詳細設計書同期。
