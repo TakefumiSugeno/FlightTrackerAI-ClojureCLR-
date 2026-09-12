@@ -95,6 +95,18 @@ FlightTrackerAI(ClojureCLR)/
   - マークアップをすべて純粋関数（`[:div {:class "..."} ...]`）として記述。ドメインデータ構造から安全・高速に HTML 文字列へ変換。
 - **動的更新 & 画面対話**:
   - **HTMX**: ページ全体の再読み込みを行わず、タスクの登録・削除・即時実行・フィルタリング時にサーバーから返却される HTML フラグメント（`/fragments/*`）を部分置換。
+- **UIライブラリ & スタイル標準 (モック原典準拠)**:
+  - **Lucide Icons**: モック原典と完全一致させるため、`<script src="https://unpkg.com/lucide@latest"></script>` を採用。FontAwesome は全廃し、細線でモダンな航空券ダッシュボード表現に統一。
+  - **HTMX ライフサイクル連携**: HTMX による動的 DOM 差し替え（`hx-swap`, OOB swap）時にもアイコンが正常に SVG 展開されるよう、以下のグローバルフックを `layout.clj` に設置:
+    ```javascript
+    document.addEventListener('htmx:afterSwap', function() {
+      if (window.lucide) lucide.createIcons();
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.lucide) lucide.createIcons();
+    });
+    ```
+  - **Tailwind CSS カスタムパレット**: `<script>` 内で `tailwind.config` を定義し、モック原典と同一の `skyline` カラーパレット（`#0284c7`, `#0369a1`, `#075985`, `#0c4a6e`, `#082f49` 等）を提供。
 - **クライアント側インタラクティブ処理**:
   - Excel風テーブルのインクリメンタル絞り込み・ソート、アクティブフィルタチップバーの同期、および Chart.js との連携を Vanilla JS で軽量に実装。
   - 表示切り替え（カード ⇔ リスト）を行っても、絞り込み状態や検索語句が破棄されずシームレスに維持されるクライアント状態管理を担保。
@@ -251,6 +263,48 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
      - クライアント側 `document.body.addEventListener('closeModal', ...)` が発火し、確実にモーダルをクローズ。
    - **バリデーションエラー・送信失敗時 (400 Bad Request / 200 エラー表示)**:
      - `HX-Trigger: closeModal` は出力せず、インライン赤字エラーメッセージを含めたモーダル HTML を返却。モーダルおよびユーザー入力値を完全に維持し、最初のエラー項目へ自動フォーカスを誘導。
+
+### 2.5 モック完全準拠フロントエンド・コンポーネント詳細設計
+
+1. **新規タスク登録・タスク編集モーダル (`#newTaskModal` / `#editModal`)**:
+   - **旅行タイプトグルスイッチ**:
+     - `往復` (`RoundTrip`) / `片道` (`OneWay`) の2ボタン切替。
+     - 片道選択時は復路出発日入力コンテナ（`#inboundDateContainer`）を `display: none` に動的制御。
+   - **主要空港サジェスト (`<datalist id="airportsList">`)**:
+     - 国内主要空港（HND, NRT, KIX, ITM, FUK, CTS）および主要国際空港（CDG, LHR, LAX, SFO, HNL, BKK, SIN, TPE）を datalist に配備。
+     - サーバー側の `extract-iata-code` 関数により、「`HND - 東京(羽田)`」形式の文字列から先頭の3文字 IATA コードを抽出・サニタイズしてドメインモデルへ格納。
+   - **許容乗継回数 (Max Stops) セレクト**:
+     - `Any` (乗継制限なし・最安重視・推奨)、`1` (1回乗継まで)、`DirectOnly` (直行便のみ・0回乗継)。
+   - **巡回間隔セレクト**:
+     - `default` (全体設定に従う)、`3` (3時間ごと)、`6` (6時間ごと)、`12` (12時間ごと)、`24` (24時間ごと)。
+   - **優先航空会社 & メモ**:
+     - `preferredAirlines`（テキスト入力、カンマ区切り可）および `userNotes`（複数行テキストエリア）。
+   - **Discord Webhook 通知**:
+     - チェックボックス `useDefaultWebhook`。
+
+2. **Excel風一覧リストの複合ドロップダウンフィルタ・ソートロジック (`#listView`)**:
+   - **状態変数**:
+     - `currentStatusFilter` (`all`, `active`, `paused`, `error`, `empty`)
+     - `currentRouteFilter` (`all`, または選択されたルート)
+     - `currentAirlineFilter` (`all`, または選択された航空会社)
+     - `currentSortPriceOrder` (`none`, `asc`, `desc`)
+   - **ドロップダウン制御**:
+     - `#statusDropdown`, `#routeDropdown`, `#airlineDropdown` の開閉・トグル制御およびドキュメント外側クリックによる自動閉鎖。
+   - **アクティブフィルタチップスバー連動**:
+     - `#chipStatus`, `#chipRoute`, `#chipAirline` の表示・個別解除ボタン（✕）および「全解除」ボタンによる即時クリア。
+   - **価格ソート機能**:
+     - `#btnSortPrice` クリック時に `asc` ➔ `desc` ➔ `none` を巡回し、DOM 上の `tableRow` 要素の `data-price` 属性に基づき並び替え。
+
+3. **専用削除確認モーダル (`#deleteModal`)**:
+   - ブラウザ標準の `confirm()` ダイアログを全廃。
+   - モックと同一の赤い警告アイコン（`alert-triangle`）、対象タスクのルート名、データ完全削除の注意文言を表示。
+   - 「キャンセル」でモーダルを閉じ、「削除する」ボタンで `DELETE /api/tasks/{id}` を呼び出して安全に削除完了・OOB更新。
+
+4. **詳細モーダル (`#detailModal`)**:
+   - AI Advice Box（買い時サマリー）。
+   - 旅程タイムライン: 往路セクションおよび復路セクションにおいて、区間ごとの航空会社バッジ、便名、発着時刻、乗継待ち時間をカード階層表示。
+   - 価格推移チャート (Chart.js): 期間選択タブ (3日, 7日, 14日, 全期間) と Google Flights / Skyscanner / 目標価格の折れ線比較。
+   - 複数便比較テーブル: 各候補便の所要時間・乗継・総額価格・予約リンク表示。
 
 ## 3. ドメイン設計 (Domain Models in ClojureCLR)
 
