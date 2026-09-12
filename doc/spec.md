@@ -114,85 +114,100 @@ flowchart TD
 
 ---
 
-## 4. Web 画面仕様 (UI Wireframe / Structure) - モック原典 (doc/mock/index.html) 準拠
+## 4. Web 画面仕様 (UI Wireframe / Structure) - 元リポジトリ (FlightTrackerAI) 準拠
 
-システム全体のビジュアルデザイン、レイアウト、コンポーネント構成は、プロトタイプ原典である `doc/mock/index.html` に100%厳格準拠する。
+システム全体のビジュアルデザイン、レイアウト、コンポーネント構成、HTMX インタラクション、各種機能は、正常稼働リファレンス実装である `D:\programming\repos\MyGitHubRepos\FlightTrackerAI` (F#版) に 100% 厳格準拠する。
 
 ### 4.0 共通UI基盤・スタイル標準
 
 - **デザインシステム・カラー**: Tailwind CSS。ダークテーマベース（`bg-slate-900`, `text-slate-100`, `bg-slate-950`）。
-- **カスタムパレット (`skyline`)**: `#0284c7`, `#0369a1`, `#075985`, `#0c4a6e`, `#082f49` などの航空監視用スカイブルー階調。
-- **アイコン標準**: **Lucide Icons** (`https://unpkg.com/lucide@latest`) を全面統一採用（`<i data-lucide="..."></i>`）。FontAwesome 等の他ライブラリは使用せず、細線でモダンな航空券ダッシュボードの質感を担保する。
+- **カスタムスタイル & アニメーション**:
+  - `pulse-subtle` / `animate-pulse-subtle`: 稼働中インジケーター等の洗練されたパルス。
+  - `.badge-google`: `#064e3b` 背景、`#34d399` テキスト、`#059669` ボーダー（Google Flights 用バッジ）。
+  - `.badge-skyscanner`: `#0c4a6e` 背景、`#38bdf8` テキスト、`#0284c7` ボーダー（Skyscanner 用バッジ）。
+- **アイコン標準**: **FontAwesome 6.5.1** (`https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css`) を全面統一採用。HTMX による部分置換時にも一切のちらつきやアイコン欠落がなく、100% 確実に描画される。
+- **UIライブラリ**: **HTMX 1.9.12**, **Chart.js**。
 - **フォント**: サンセリフ系 (`font-sans antialiased`)、数値・コード表示部は等幅フォント (`font-mono`)。
 
 ### 4.1 メイン画面構成
 
 1. **ヘッダー (Header)**:
-   - 左部: 飛行機ロゴ (`plane`、スカイブルー背景角丸アイコン)、タイトル「FlightTracker**AI**」（AI部は `text-sky-400`）、サブタイトル「Google Flights & Skyscanner 自動巡回・価格監視」。
+   - 左部: 飛行機ロゴ (`fa-plane`、スカイブルー背景角丸アイコン)、タイトル「FlightTracker**AI**」（AI部は `text-sky-400`）、サブタイトル「Google Flights & Skyscanner 自動巡回・価格監視」。
    - 右部:
-     - 巡回ワーカー稼働ステータスバッジ（緑色パルスインジケーター、「稼働中 (次巡回: 18:00)」）。
-     - システム全体設定ボタン (`sliders` アイコン + 「全体設定」テキスト、ボーダー付きダークボタン)。
-     - 新規タスク登録ボタン (`plus` アイコン + 「新規タスク登録」テキスト、スカイブルー強調ボタン)。
-2. **有頭手動支援ガイダンスバナー (Bot Challenge Assistance Banner / UC-10)**:
-   - Skyscanner / Kasada 等の Bot 検知時（PRESS & HOLD）に最上部にアニメーション付きで表示。
-   - 残り解除カウントダウンバッジ（60秒）、注意喚起文言、「手動解除シミュレート」ボタン、閉じる（`x`）ボタン。
-3. **AI 構造化文書・自然言語解析アシスタントボックス**:
-   - `sparkles` アイコン、テンプレート入力ボタン（「箇条書き」「YAML形式」「自然文」）。
-   - 自由記述テキストエリア（等幅フォント、複数行）。
-   - 「AIで解析して新規登録フォームに反映」ボタン（`wand-2` アイコン）。
-4. **コントロールバー (Controls Bar)**:
-   - **ステータスタブ**: 「すべて (N)」「監視中 (N)」「一時停止 (N)」「エラー (N)」「未登録 (0件画面)」。
-   - **クイック検索**: 虫眼鏡アイコン (`search`) 付きインクリメンタル検索窓（都市・空港・航空会社・メモ横断検索）。
-   - **ビュー切替ボタングループ**: [🔲 カード (`layout-grid`)] / [📋 一覧リスト (Excel風) (`table`)]。
-5. **カードビュー (`#cardsView`)**:
-   - 2カラムグリッド配置。
-   - 上部: 目標達成 (`check-circle` 🎯)、監視中、一時停止、エラーの各ステータスバッジ、巡回間隔バッジ（例: `往復 (12h毎巡回)`）。
-   - アクションボタン群: 即時巡回 (`refresh-cw`)、タスク設定変更 (`edit-3`)、削除 (`trash-2`)。
-   - 区間・発着時刻: IATAコード（例: `HND ➔ CDG`）、都市名・空港名、往路・復路の発着予定時刻と所要時間・乗継サマリー。
-   - 最安航空会社・価格ブロック: 最安航空会社（プロバイダ色インジケーター）、取得日時（`clock` アイコン）、現在最安値、目標アラート価格。
-   - ユーザーメモボックス (`file-text` アイコン、メモテキスト、インライン編集ボタン `edit-2`)。
-   - フッター: スクレイピングプロバイダーバッジ（`Google`, `Skyscanner`）、詳細モーダル展開リンク（`chevron-right`）。
-6. **一覧リストビュー (Excel風 Table View / `#listView`)**:
-   - **アクティブフィルタチップスバー (`#activeFilterChipsBar`)**: 適用中のフィルタ（ステータス、航空会社、区間）、表示件数サマリー（`表示中: M / 全N件`）、全解除リンク。
-   - **Excel風インタラクティブ列ヘッダー**:
-     - ステータス列: ドロップダウンボタン (`#btnFilterStatus`) ➔ `#statusDropdown`
-     - 区間列: ドロップダウンボタン (`#btnFilterRoute`) ➔ `#routeDropdown`
-     - 航空会社列: ドロップダウンボタン (`#btnFilterAirline`) ➔ `#airlineDropdown`
-     - 価格列: 昇順/降順ソートボタン (`arrow-up-down`)
-   - 行内容: ステータスバッジ、区間・空港通称、往復発着時刻、乗継/所要、最安会社、最安価格・取得元、目標価格、メモ、取得日時、操作ボタングループ。
-7. **空状態画面 (Empty State / `#emptyStateView`)**:
-   - タスク未登録時に表示される洗練されたプレースホルダー。飛行機スラッシュアイコン (`plane-off` / `plane-slash`)、「タスクを登録する」ボタン、「AIアシスタントへ移動」ボタン。
+     - 巡回ワーカー稼働ステータスバッジ（緑色パルスインジケーター、「巡回ワーカー: 稼働中」）。
+     - **ログ確認ボタン** (`fa-terminal` + 「ログ確認」、`/api/logs/modal` ➔ `#modal-container`)。
+     - **全体設定ボタン** (`fa-sliders` + 「全体設定」、`/api/settings/modal` ➔ `#modal-container`)。
+     - **新規タスク登録ボタン** (`fa-plus` + 「新規タスク登録」、`/api/tasks/new-modal` ➔ `#modal-container`)。
+2. **AI 構造化文書・自然言語解析アシスタントボックス**:
+   - `fa-wand-magic-sparkles` アイコン、タイトル。
+   - テンプレート入力ボタン（「箇条書き」「YAML形式」「自然文」）。
+   - 自由記述テキストエリア（等幅フォント、複数行、プレースホルダー付き）。
+   - **「AIで解析して新規登録フォームに反映」ボタン** (`fa-wand-magic`):
+     - クリック時、ポップアップブロッカーを回避して即座に別タブで飛行機アニメーション付きローディングUIを展開。
+     - OpenRouter による自然言語解析（`/api/ai/parse`）完了後、抽出されたパラメータ（出発地、目的地、日程、予算等）が自動入力された新規登録画面（`/tasks/new?...`）に遷移。
+3. **コントロールバー (Controls Bar)**:
+   - **ステータスタブ**: 「すべて (N)」「監視中 (N)」「一時停止 (N)」「完了/エラー (N)」。HTMX (`hx-get="/api/tasks/view?mode=...&status=..."`) で `#dashboard-container` を即時部分置換。
+   - **クイック検索**: 虫眼鏡アイコン (`fa-magnifying-glass`) 付きインクリメンタル検索窓（`keyup changed delay:300ms` で即時絞り込み）。
+   - **ビュー切替ボタングループ**: [🔲 カード (`fa-table-cells-large`)] / [📋 一覧リスト (Excel風) (`fa-table`)]。
+4. **カードビュー (`renderTaskCard`)**:
+   - 2〜3カラムレスポンシブグリッド配置。
+   - 上部バー:
+     - ステータスインジケーター（監視中は緑パルス、一時停止は黄、エラーは赤）およびバッジ。
+     - タイトルおよび日程（カレンダーアイコン付き）。
+     - **5大アクションボタン群**:
+       1. **一時停止 / 再開トグル** (`fa-play` / `fa-pause`、`POST /api/tasks/:id/toggle-status` ➔ `#dashboard-container`)
+       2. **即時巡回 (ヘッドレス)** (`fa-arrows-rotate`、`POST /api/tasks/:id/run?headless=true` ➔ `#dashboard-container`)
+       3. **ブラウザを開いて巡回 (手動支援)** (`fa-window-restore`、`POST /api/tasks/:id/run?headless=false` ➔ `#dashboard-container` ※Bot認証回避用)
+       4. **タスク設定変更 (編集モーダル)** (`fa-pen-to-square`、`GET /api/tasks/:id/modal` ➔ `#modal-container`)
+       5. **タスク削除** (`fa-trash-can`、`DELETE /api/tasks/:id` ➔ `#dashboard-container`)
+   - ルート表示: 出発空港 (IATA) ➔ 飛行機ライン (乗継区分) ➔ 到着空港 (IATA)。
+   - 価格情報: 現在最安値（Google / Skyscanner バッジ）、目標価格比較（目標達成時はエメラルドグリーン強調表示）。
+   - 航空会社 & ユーザーメモ: メモアイコン、メモテキスト（クリックで即時メモ編集モーダル `/api/tasks/:id/notes-modal` 展開）、最新取得日時。
+   - フッターボタン: **「価格推移・旅程詳細」ボタン** (`fa-chart-line`、`/api/tasks/:id/detail-modal` ➔ `#modal-container`)。
+5. **一覧リストビュー (Excel風 Table View / `renderTaskTable`)**:
+   - 実データと完全に連動したテーブル描画。
+   - 10列構成:
+     1. タスク名 / 状態（ステータスドット付き）
+     2. 区間 / 種別（往復/片道）
+     3. 日程（往路〜復路）
+     4. 乗継 / 所要時間（直行便のみ/経由1回/制限なし、巡回間隔）
+     5. 現在最安値（プロバイダーバッジ付）
+     6. 目標価格
+     7. 最安航空会社
+     8. メモ（クリックで即時メモ編集モーダル展開）
+     9. 取得日時 (JST)
+     10. 操作ボタン群（一時停止/再開、ヘッドレス巡回、ブラウザ手動巡回、詳細、編集、削除）
+6. **空状態画面 (Empty State / `renderEmptyState`)**:
+   - タスク未登録時に表示される洗練されたプレースホルダー。飛行機スラッシュアイコン (`fa-plane-slash`)、「タスクを登録する」ボタン (`/api/tasks/new-modal`)。
 
-### 4.2 各種モーダル仕様 (Modals Standard)
+### 4.2 各種モーダル & 独立ページ仕様 (Modals Standard)
 
-1. **MODAL 1: 詳細モーダル (`#detailModal`)**:
+1. **MODAL 1: 旅程詳細モーダル (`detail-modal`)**:
    - ヘッダー: タスク名、区間、目標価格。
-   - AI Advice Box (`sparkles` アイコン、買い時予測、AIによる詳細解説)。
-   - 旅程タイムライン:
-     - 往路セクション: 各区間セグメント（出発/到着空港、航空会社バッジ、便名、発着時刻、乗継地レイオーバー時間）。
-     - 復路セクション: 各区間セグメント。
-   - 価格推移チャート (Chart.js): 期間選択タブ (3日, 7日, 14日, 全期間) と Google Flights / Skyscanner / 目標価格の折れ線比較。
-   - 同日・同区間の最新候補便一覧比較テーブル (Multi-Flight Offer Table): ソース、航空会社、乗継、所要時間、価格、予約リンク。
-2. **MODAL 2: 新規タスク登録モーダル (`#newTaskModal`)**:
-   - 旅行タイプ切り替え: 「往復」「片道」トグルボタンスイッチ（片道選択時は復路出発日入力欄が非表示）。
+   - AI Advice Box: 買い時診断サマリー。
+   - 価格推移チャート (Chart.js): 時系列折れ線グラフ（Google Flights / Skyscanner）+ 目標価格破線ライン。
+   - **候補便一覧比較テーブル (Multi-Flight Offer Table)**:
+     - 実際に巡回・収集された最新候補便データ（ソースプロバイダー、航空会社サマリー、乗継回数、所要時間、価格、公式予約リンク ↗）を一覧表示。
+2. **MODAL 2: 新規タスク登録モーダル & 編集モーダル (`task-modal`)**:
+   - 旅行タイプ切り替え: 「往復」「片道」ボタンスイッチ（片道選択時は復路出発日欄が非表示）。
    - 出発地・目的地: 主要空港（羽田、成田、関空、伊丹、福岡、新千歳、CDG、LHR、LAX、SFO、HNL、BKK、SIN、TPE等）の `<datalist id="airportsList">` 補完。
-   - 往路出発日・復路出発日入力。
+   - 往路出発日・復路出発日入力（カレンダー付き）。
    - 許容乗継回数 (Max Stops): セレクト（「乗継制限なし」「1回乗継まで」「直行便のみ」）。
    - 巡回間隔: セレクト（全体設定に従う / 3h / 6h / 12h / 24h）。
-   - 目標アラート価格 (JPY)、優先航空会社 (任意)、構造化メモ（任意）。
-   - 「デフォルトの Discord Webhook に通知する」チェックボックス。
-   - ボタン: 「キャンセル」「登録して巡回開始」。
-3. **MODAL 3: タスク設定編集モーダル (`#editModal`)**:
-   - 新規登録と同様のフィールド構成で、既存値が初期入力された編集画面。
-4. **MODAL 4: 全体システム設定モーダル (`#settingsModal`)**:
+   - 目標アラート価格 (JPY)、タスク名、Webhook URL、ユーザーメモ、ブラウザ表示フラグ。
+   - ボタン: 「キャンセル」「登録して巡回開始」（編集時は「設定を保存」）。
+   - 送信後: モーダルが自動的に閉じられ、ダッシュボードが即座に最新化（`closeCurrentModal(); showToast('...');`）。
+3. **独立画面: スタンドアロン新規タスク登録画面 (`/tasks/new`)**:
+   - AI自然言語解析完了後に自動遷移するフルページ登録画面。URL クエリパラメータ（origin, destination, outboundDate, inboundDate, tripType, maxStops, maxPriceJpy, notes）から自動補完。
+4. **MODAL 3: メモ編集モーダル (`notes-modal`)**:
+   - 対象ルート名表示、ユーザー要望メモ入力テキストエリア、「キャンセル」「メモを保存」ボタン。
+5. **MODAL 4: 全体システム設定モーダル (`settings-modal`)**:
    - デフォルト巡回間隔（3h / 6h / 12h / 24h）。
    - デフォルト Discord Webhook URL & 「テスト送信」ボタン。
    - OpenRouter API Key (AI支援機能用)。
-   - スクレイピングプロバイダー設定（Google Flights / Skyscanner 巡回有効化チェックボックス）。
-5. **MODAL 5: 削除確認モーダル (`#deleteModal`)**:
-   - 赤色警告アイコン (`alert-triangle`)、対象タスクのルート名明示、データ完全削除の注意文言、「キャンセル」「削除する」ボタン。
-6. **MODAL 6: クイックメモ編集モーダル (`#quickNoteModal`)**:
-   - 対象ルート名表示、ユーザー要望メモ入力テキストエリア、「キャンセル」「メモを保存」ボタン。
+   - プロバイダー有効化（Google Flights / Skyscanner チェックボックス）。
+6. **MODAL 5: システム実行ログモーダル (`logs-modal`)**:
+   - 最新ログ表示、再読込ボタン、**「ログをコピー (AI共有用)」ボタン**。
 
 ### 4.1 モーダルナビゲーションおよびライフサイクル仕様 (Modal Navigation & Lifecycle)
 

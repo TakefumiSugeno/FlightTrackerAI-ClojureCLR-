@@ -88,28 +88,26 @@ FlightTrackerAI(ClojureCLR)/
 
 ## 2. フロントエンドおよび HTTP ホスティング設計 (100% ClojureCLR)
 
-### 2.1 採用アーキテクチャ: `Hiccup風 HTML DSL (Clojure)` + `HTMX`
+### 2.1 採用アーキテクチャ: `Hiccup風 HTML DSL (Clojure)` + `HTMX` + `FontAwesome` + `Tailwind CSS`
 
 - **サーバーサイド レンダリング (SSR)**:
   - Clojure 標準のデータ構造（ベクタ・マップ・キーワード）を用いた **Hiccup 風 HTML 生成エンジン (`html_dsl.clj`)** を採用。
   - マークアップをすべて純粋関数（`[:div {:class "..."} ...]`）として記述。ドメインデータ構造から安全・高速に HTML 文字列へ変換。
+  - `(h/raw "...")` を安全に展開し、`<script>` や生HTMLを一切破損せずにブラウザへ供給。
 - **動的更新 & 画面対話**:
-  - **HTMX**: ページ全体の再読み込みを行わず、タスクの登録・削除・即時実行・フィルタリング時にサーバーから返却される HTML フラグメント（`/fragments/*`）を部分置換。
-- **UIライブラリ & スタイル標準 (モック原典準拠)**:
-  - **Lucide Icons**: モック原典と完全一致させるため、`<script src="https://unpkg.com/lucide@latest"></script>` を採用。FontAwesome は全廃し、細線でモダンな航空券ダッシュボード表現に統一。
-  - **HTMX ライフサイクル連携**: HTMX による動的 DOM 差し替え（`hx-swap`, OOB swap）時にもアイコンが正常に SVG 展開されるよう、以下のグローバルフックを `layout.clj` に設置:
-    ```javascript
-    document.addEventListener("htmx:afterSwap", function () {
-      if (window.lucide) lucide.createIcons();
-    });
-    document.addEventListener("DOMContentLoaded", function () {
-      if (window.lucide) lucide.createIcons();
-    });
-    ```
-  - **Tailwind CSS カスタムパレット**: `<script>` 内で `tailwind.config` を定義し、モック原典と同一の `skyline` カラーパレット（`#0284c7`, `#0369a1`, `#075985`, `#0c4a6e`, `#082f49` 等）を提供。
+  - **HTMX 1.9.12**: ページ全体の再読み込みを行わず、タスクの登録・削除・即時実行・一時停止・フィルタリング時にサーバーから返却される HTML フラグメント（ダッシュボード全体やカード単体）を部分置換。
+- **UIライブラリ & スタイル標準 (元リポジトリ `FlightTrackerAI` 完全準拠)**:
+  - **FontAwesome 6.5.1 (`all.min.css`)**:
+    - 元リポジトリと同一のアイコンスタック。CSS アイコンフォント（`<i class="fa-solid fa-plane"></i>` 等）であるため、HTMX による動的 DOM 部分置換時にも JavaScript の再展開処理が一切不要であり、即座かつ安定してレンダリングされます。
+  - **Tailwind CSS (CDN)**:
+    - レスポンシブ、ユーティリティファーストのスタイリング。空の旅をイメージしたスカイブルー・スレート基調のデザイン。
+  - **Chart.js (CDN)**:
+    - 旅程詳細モーダル内での価格推移チャート（巡回日時と最安値の折れ線グラフ、目標価格ライン）の動的描画。
+  - **トースト通知システム (Toast)**:
+    - 画面右上に操作成功・情報・警告・エラーメッセージを自動スライドイン表示。
 - **クライアント側インタラクティブ処理**:
-  - Excel風テーブルのインクリメンタル絞り込み・ソート、アクティブフィルタチップバーの同期、および Chart.js との連携を Vanilla JS で軽量に実装。
-  - 表示切り替え（カード ⇔ リスト）を行っても、絞り込み状態や検索語句が破棄されずシームレスに維持されるクライアント状態管理を担保。
+  - AI 自然言語解析時の別タブ展開 / プログレス表示と `/tasks/new` へのパラメータ自動入力遷移。
+  - 表示切り替え（カード表示 ⇔ テーブル表示）のシームレスな切替。
 
 ### 2.2 純粋 ClojureCLR HTTP サーバー (`server.clj`)
 
@@ -225,86 +223,71 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
 
 ### 2.3 モーダルナビゲーション・ライフサイクル設計 (Modal Navigation & Lifecycle)
 
-クライアント側のイベントモデルとブラウザ履歴を整合させるため、以下の状態管理と排他制御を導入します:
+クライアント側のイベントモデルと HTMX の通信を整合させるため、以下の状態管理と排他制御を導入します:
 
-1. **二重フェッチの完全排除**:
-   - `dashboard.clj` 内の全ボタン（新規登録・編集・メモ・詳細）から `:hx-get` と `:onclick` の同居を廃止し、HTMX による宣言的ロード（`:hx-get` + `:hx-target="#modal-container"`）に統一。
-   - インライン JS での重複 fetch を全廃し、1クリック＝1リクエストを保証。
+1. **HTMX 宣言的ロード**:
+   - 新規登録、編集、旅程詳細、メモ、全体設定、ログの各モーダルは、`:hx-get` + `:hx-target="#modal-container"` によってサーバーから HTML フラグメントを取得し、`#modal-container` へ注入。
+   - 不要なインライン `fetch` を廃止し、HTMX による標準的・宣言的な部分描画に統一。
 
-2. **History API 排他制御ステートマシン**:
-   - クライアント側で `window.__modalState = { isOpen: false, isNavigatingBack: false }` を保持。
-   - **初期ロード時の URL サニタイズ**: ページ読み込み時に URL に `#modal` が残存している場合は `history.replaceState(null, '', window.location.pathname)` でクリーンアップし、履歴破損を防止。
-   - **モーダルオープン時**:
-     - `htmx:afterSwap`（ターゲットが `#modal-container` かつモーダル要素存在時）を検知。
-     - `!window.__modalState.isOpen` の場合、`history.pushState({ modalOpen: true }, '', '#modal')` を発行し、`isOpen = true`。
-     - 既に開いている状態でのモーダル差し替え（連続展開）時は `history.replaceState` を適用。
-     - `document.body.classList.add('overflow-hidden')` で背面スクロールをロック。
-   - **ブラウザ戻る操作 (`popstate`) 時**:
-     - `window.__modalState.isOpen` の場合、DOM 上のモーダルを消去し、`isOpen = false` に設定（`history.back()` は呼ばない）。
-     - `document.body.classList.remove('overflow-hidden')` でスクロールロック解除。
-   - **UI 操作（×ボタン、キャンセル、背景クリック、ESCキー、保存成功）時**:
-     - `window.__modalState.isOpen` の場合、`history.state?.modalOpen` または `location.hash === '#modal'` を確認の上、`history.back()` を発行して履歴を整合。直後の `popstate` はフラグにより二重処理を抑止。
-
-3. **ダーティフォーム保護 & IME安全機構**:
-   - フォーム各入力項目の「初期表示時の値からの変更有無」を追跡し、変更がある場合のみ背景クリックによる即時破棄を抑止。明示的な「キャンセル」ボタンまたは「×」ボタン押下によってのみクローズ可能とする。
-   - `keydown` イベント監視時、`e.isComposing || e.keyCode === 229` の場合は ESC キー押下であってもモーダルクローズを抑止し、日本語入力変換中の意図しない消去を保護。
+2. **モーダル開閉ステート管理 (`layout.clj`)**:
+   - モーダルが開かれた際は、背景スクロールを抑止（`overflow-hidden`）。
+   - クローズ契機:
+     - モーダル右上の「✕」ボタンまたはフッターの「キャンセル / 閉じる」ボタン。
+     - モーダル背面の半透明オーバーレイクリック。
+     - ESC キー押下（日本語 IME 変換中 `isComposing` を検知して誤閉鎖を防止）。
+     - フォーム保存成功時にサーバーから返却されるレスポンスヘッダー `HX-Trigger: closeModal` の受信。
+   - `closeModal` イベント受信時に `#modal-container` 内の DOM を空にし、背面スクロールを復帰。
 
 ### 2.4 HTTP ヘッダー伝搬・レスポンス設計 (HTTP Header & Error Handling)
 
 1. **カスタムレスポンスヘッダーの ASCII 安全な出力 (`server.clj`)**:
    - .NET `HttpListenerResponse.AddHeader` の HTTP/1.1 ASCII 準拠制約を満たすため、`server.clj` の `write-response` でヘッダーマップ（例: `{"HX-Trigger" "closeModal"}`）を安全に設定。
-   - 正規表現 `^[\x20-\x7E]+$` により ASCII 安全性を検証した上で `.AddHeader` を実行。日本語等のマルチバイト文字列はヘッダー値に含めず、レスポンス HTML ボディ側で渡す。
+   - 正規表現 `^[\x20-\x7E]+$` により ASCII 安全性を検証した上で `.AddHeader` を実行。
 
 2. **正常系と異常系の HTMX swap 分離設計 (`api_controller.clj`)**:
    - モーダル内フォームの `:hx-target` はモーダル自身（または `#modal-container`）とし、親画面の破壊を防止。
    - **正常終了時 (200 OK)**:
      - レスポンスヘッダー: `{"HX-Trigger" "closeModal"}`
-     - レスポンスボディ: `<div id="dashboard-container" hx-swap-oob="outerHTML">...最新ダッシュボードHTML...</div>`
-     - クライアント側 `document.body.addEventListener('closeModal', ...)` が発火し、確実にモーダルをクローズ。
+     - レスポンスボディ: `<div id="dashboard-container" hx-swap-oob="outerHTML">...最新ダッシュボードHTML...</div>` または最新ダッシュボードフラグメント。
+     - クライアント側で確実にモーダルをクローズし、タスク一覧が最新状態に更新される。
    - **バリデーションエラー・送信失敗時 (400 Bad Request / 200 エラー表示)**:
-     - `HX-Trigger: closeModal` は出力せず、インライン赤字エラーメッセージを含めたモーダル HTML を返却。モーダルおよびユーザー入力値を完全に維持し、最初のエラー項目へ自動フォーカスを誘導。
+     - `HX-Trigger: closeModal` は出力せず、インライン赤字エラーメッセージを含めたモーダル HTML を返却。モーダルおよびユーザー入力値を完全に維持。
 
-### 2.5 モック完全準拠フロントエンド・コンポーネント詳細設計
+### 2.5 元リポジトリ完全準拠 UIコンポーネント詳細設計
 
-1. **新規タスク登録・タスク編集モーダル (`#newTaskModal` / `#editModal`)**:
-   - **旅行タイプトグルスイッチ**:
-     - `往復` (`RoundTrip`) / `片道` (`OneWay`) の2ボタン切替。
-     - 片道選択時は復路出発日入力コンテナ（`#inboundDateContainer`）を `display: none` に動的制御。
-   - **主要空港サジェスト (`<datalist id="airportsList">`)**:
-     - 国内主要空港（HND, NRT, KIX, ITM, FUK, CTS）および主要国際空港（CDG, LHR, LAX, SFO, HNL, BKK, SIN, TPE）を datalist に配備。
-     - サーバー側の `extract-iata-code` 関数により、「`HND - 東京(羽田)`」形式の文字列から先頭の3文字 IATA コードを抽出・サニタイズしてドメインモデルへ格納。
-   - **許容乗継回数 (Max Stops) セレクト**:
-     - `Any` (乗継制限なし・最安重視・推奨)、`1` (1回乗継まで)、`DirectOnly` (直行便のみ・0回乗継)。
-   - **巡回間隔セレクト**:
-     - `default` (全体設定に従う)、`3` (3時間ごと)、`6` (6時間ごと)、`12` (12時間ごと)、`24` (24時間ごと)。
-   - **優先航空会社 & メモ**:
-     - `preferredAirlines`（テキスト入力、カンマ区切り可）および `userNotes`（複数行テキストエリア）。
-   - **Discord Webhook 通知**:
-     - チェックボックス `useDefaultWebhook`。
+1. **AI 自然言語入力バー (`Dashboard.fs` 準拠)**:
+   - 自然言語による旅程検索指示（例:「来月の連休に東京から福岡へ行きたい、予算2万円」）を入力。
+   - 入力内容を `POST /api/ai/parse` へ送信。
+   - クライアント側スクリプトにより、解析中は別タブまたはローディングインジケータでプログレスを表示し、解析結果（出発地、目的地、日付、予算等）をクエリパラメータとして `/tasks/new?origin=HND&destination=FUK...` へ自動引き渡し・画面遷移。
 
-2. **Excel風一覧リストの複合ドロップダウンフィルタ・ソートロジック (`#listView`)**:
-   - **状態変数**:
-     - `currentStatusFilter` (`all`, `active`, `paused`, `error`, `empty`)
-     - `currentRouteFilter` (`all`, または選択されたルート)
-     - `currentAirlineFilter` (`all`, または選択された航空会社)
-     - `currentSortPriceOrder` (`none`, `asc`, `desc`)
-   - **ドロップダウン制御**:
-     - `#statusDropdown`, `#routeDropdown`, `#airlineDropdown` の開閉・トグル制御およびドキュメント外側クリックによる自動閉鎖。
-   - **アクティブフィルタチップスバー連動**:
-     - `#chipStatus`, `#chipRoute`, `#chipAirline` の表示・個別解除ボタン（✕）および「全解除」ボタンによる即時クリア。
-   - **価格ソート機能**:
-     - `#btnSortPrice` クリック時に `asc` ➔ `desc` ➔ `none` を巡回し、DOM 上の `tableRow` 要素の `data-price` 属性に基づき並び替え。
+2. **ダッシュボードカード 5大アクション (`Dashboard.fs` 準拠)**:
+   - 各カードの上部ヘッダーまたはアクションエリアに配置:
+     1. **一時停止 / 再開トグル**: `POST /api/tasks/{id}/toggle-status` (アイコン: `fa-pause` / `fa-play`, `hx-target="#dashboard-container"`)
+     2. **即時巡回 (ヘッドレス)**: `POST /api/tasks/{id}/run?headless=true` (アイコン: `fa-sync`, バックグラウンドで Playwright を即時起動)
+     3. **ブラウザ手動支援巡回**: `POST /api/tasks/{id}/run?headless=false` (アイコン: `fa-robot` or `fa-globe`, Bot判定やCAPTCHA解除のためブラウザ画面を表示して巡回)
+     4. **編集モーダル**: `GET /api/tasks/{id}/modal` (アイコン: `fa-edit`, `hx-target="#modal-container"`)
+     5. **削除**: `DELETE /api/tasks/{id}` (アイコン: `fa-trash`, 確認ダイアログ付き, `hx-target="#dashboard-container"`)
 
-3. **専用削除確認モーダル (`#deleteModal`)**:
-   - ブラウザ標準の `confirm()` ダイアログを全廃。
-   - モックと同一の赤い警告アイコン（`alert-triangle`）、対象タスクのルート名、データ完全削除の注意文言を表示。
-   - 「キャンセル」でモーダルを閉じ、「削除する」ボタンで `DELETE /api/tasks/{id}` を呼び出して安全に削除完了・OOB更新。
+3. **テーブル表示モード (`renderTaskTable`)**:
+   - カード表示と一覧テーブル表示を切り替え可能。
+   - テーブルカラム: ステータス、往復/片道、出発地-目的地、日程、最安価格、目標価格、更新日時、操作アクション。
 
-4. **詳細モーダル (`#detailModal`)**:
-   - AI Advice Box（買い時サマリー）。
-   - 旅程タイムライン: 往路セクションおよび復路セクションにおいて、区間ごとの航空会社バッジ、便名、発着時刻、乗継待ち時間をカード階層表示。
-   - 価格推移チャート (Chart.js): 期間選択タブ (3日, 7日, 14日, 全期間) と Google Flights / Skyscanner / 目標価格の折れ線比較。
-   - 複数便比較テーブル: 各候補便の所要時間・乗継・総額価格・予約リンク表示。
+4. **旅程詳細モーダル (`Modals.fs` 準拠)**:
+   - **タスクサマリー**: ルート、旅行種別、日程、最安値、目標価格、最終更新日時。
+   - **実DBオファーデータ一覧テーブル**:
+     - Google Flights および Skyscanner の巡回結果（DB `flight_snapshots` テーブルの実データ）をバインド。
+     - 各行に「航空会社名」「便名」「出発/到着時刻」「所要時間」「経由数」「総額価格」「公式予約リンクボタン」を完全表示。
+   - **価格推移チャート (Chart.js)**:
+     - 過去のスナップショットデータから日時と価格の折れ線グラフを動的描画。目標価格がある場合は水平破線で目標ラインを重ねて表示。
+
+5. **クイックメモモーダル (`#memoModal`)**:
+   - タスクごとに自由なメモを保存・閲覧可能（`POST /api/tasks/{id}/memo`）。
+
+6. **全体設定モーダル (`#settingsModal`)**:
+   - 巡回ワーカー間隔（時間）、グローバル Discord Webhook URL、OpenRouter API Key、モデル名の更新。
+
+7. **スタンドアロン新規登録画面 (`/tasks/new`)**:
+   - AI 解析からの画面遷移先としても機能する独立ページ。主要空港のサジェスト、日付ピッカー、目標価格、優先航空会社入力に対応。
 
 ## 3. ドメイン設計 (Domain Models in ClojureCLR)
 
