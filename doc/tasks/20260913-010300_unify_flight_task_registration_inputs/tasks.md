@@ -74,29 +74,29 @@
   - `useDefaultWebhook` OFF 時の通知スキップ仕様（`"DISABLED"` 格納）を明記。
 
 ### Phase 2: バックエンド & フロントエンド実装（TDD）
-- [ ] **フォーム部品の共通化リファクタリング (`modals.clj`)**:
+- [x] **フォーム部品の共通化リファクタリング (`modals.clj`)**:
   - `render-task-form-fields` を新設し、全12項目の共通入力UIコンポーネント化（コピペ根絶）。
   - `render-task-modal` と `render-standalone-new-task-page` の双方が共通関数を呼び出す設計に統一。
   - 日付入力欄に `min`（本日日付）属性を追加し、過去日付の選択を抑止。
   - 巡回間隔の全体設定値を動的に反映表示。
-- [ ] **AI解析〜フロントエンド連携の強化 (`ai_client.clj`, `layout.clj`, `api_controller.clj`)**:
+- [x] **AI解析〜フロントエンド連携の強化 (`ai_client.clj`, `layout.clj`, `api_controller.clj`)**:
   - `ai_client.clj`: AI抽出結果に `:Title`（タイトル）も含める（またはプロンプトから生成）。
   - `layout.clj`: `parseWithAI()` において、`title` を URL クエリパラメータに確実に引き渡す。
   - `api_controller.clj`: `GET /api/tasks/new-modal` において、`maxStops` と `title` を `params` に確実にマップする。
-- [ ] **コントローラ共通化 & エラーハンドリング強化 (`api_controller.clj`)**:
+- [x] **コントローラ共通化 & エラーハンドリング強化 (`api_controller.clj`)**:
   - `parse-task-form` ヘルパーを新設し、パラメータ正規化・バリデーション・TaskItem生成ロジックを一元化。
   - `POST /api/tasks/standalone` でバリデーションエラーが発生した場合、白画面ではなく入力値を保持してエラー表示付きで再レンダリングする。
   - `useDefaultWebhook` が OFF（未チェック）の場合、タスクの `:notification-webhook-url` に `"DISABLED"` を設定。
-- [ ] **通知スキップ制御の実装 (`notification.clj`)**:
+- [x] **通知スキップ制御の実装 (`notification.clj`)**:
   - `(:notification-webhook-url task-item)` が `"DISABLED"` の場合、通知を確実にスキップする。
-- [ ] **テストの追加・更新**:
+- [x] **テストの追加・更新**:
   - `modals_tests.clj`: モーダルおよびスタンドアロン画面の双方に全12項目が存在することのテスト。
   - `api_controller_tests.clj`: スタンドアロン画面での全項目登録テスト、バリデーションエラー時の再描画テスト。
   - `notification_tests.clj`: `"DISABLED"` 時に通知が送信されないことのテスト。
 
 ### Phase 3: テスト実行・検証
-- [ ] `./scripts/test.ps1` を実行し、全テスト通過 (✔) およびカバレッジ 80% 以上を確認。
-- [ ] テスト合否レポート (`doc/work/TestResults/TestResults.html`) およびカバレッジレポート (`doc/work/CoverageReport/index.html`) の確認。
+- [x] `./scripts/test.ps1` を実行し、全テスト通過 (✔) およびカバレッジ 80% 以上を確認。
+- [x] テスト合否レポート (`doc/work/TestResults/TestResults.html`) およびカバレッジレポート (`doc/work/CoverageReport/index.html`) の確認。
 
 ### Phase 4: ドキュメント同期 & コミット
 - [ ] 仕様書・設計書等の最終同期。

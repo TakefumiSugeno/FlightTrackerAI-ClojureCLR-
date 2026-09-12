@@ -41,54 +41,215 @@
    [:option {:value "SIN - シンガポール(チャンギ)"}]
    [:option {:value "TPE - 台北(桃園)"}]])
 
-;; 1. タスク登録・編集モーダル (Modals.fs 完全準拠)
+(defn- get-jst-today-str []
+  (let [today (DateOnly/FromDateTime (.DateTime (.ToOffset (DateTimeOffset/UtcNow) (TimeSpan/FromHours 9.0))))]
+    (.ToString today "yyyy-MM-dd")))
+
+(defn- extract-task-field-values [task-opt initial-params]
+  (if task-opt
+    {:origin (domain/iata-code-value (:origin task-opt))
+     :destination (domain/iata-code-value (:destination task-opt))
+     :title (or (:title task-opt) "")
+     :tripType (if (= (:kind (:trip-type task-opt)) :one-way) "OneWay" "RoundTrip")
+     :outboundDate (when-let [ob (or (:outbound (:trip-type task-opt)) (:outbound-date (:trip-type task-opt)))]
+                     (.ToString ^DateOnly ob "yyyy-MM-dd"))
+     :inboundDate (when-let [ib (or (:inbound (:trip-type task-opt)) (:inbound-date (:trip-type task-opt)))]
+                    (.ToString ^DateOnly ib "yyyy-MM-dd"))
+     :maxStops (case (:max-stops task-opt)
+                 :direct-only "DirectOnly"
+                 :one-stop "OneStop"
+                 "Any")
+     :targetPriceJpy (when-let [tp (:target-price-jpy task-opt)] (str tp))
+     :checkIntervalHours (str (or (:check-interval-hours task-opt) 12))
+     :userNotes (or (:user-notes task-opt) "")
+     :useDefaultWebhook (not= (:notification-webhook-url task-opt) "DISABLED")
+     :showBrowser (not (:is-headless task-opt))}
+    {:origin (or (:origin initial-params) "")
+     :destination (or (:destination initial-params) "")
+     :title (or (:title initial-params) "")
+     :tripType (or (:tripType initial-params) "RoundTrip")
+     :outboundDate (:outboundDate initial-params)
+     :inboundDate (:inboundDate initial-params)
+     :maxStops (or (:maxStops initial-params) "Any")
+     :targetPriceJpy (or (:targetPriceJpy initial-params) (:maxPriceJpy initial-params) "")
+     :checkIntervalHours (or (:checkIntervalHours initial-params) "12")
+     :userNotes (or (:userNotes initial-params) (:notes initial-params) "")
+     :useDefaultWebhook (if (contains? initial-params :useDefaultWebhook)
+                          (boolean (or (= (:useDefaultWebhook initial-params) "true")
+                                       (= (:useDefaultWebhook initial-params) true)))
+                          true)
+     :showBrowser (boolean (or (= (:showBrowser initial-params) "true")
+                               (= (:showBrowser initial-params) true)))}))
+
+(defn render-task-form-fields
+  "手動登録モーダルおよびスタンドアロン登録画面で共有される全12項目の共通入力UI部品"
+  [field-values & [{:keys [default-check-interval]}]]
+  (let [origin-val (or (:origin field-values) "")
+        dest-val (or (:destination field-values) "")
+        task-title (or (:title field-values) "")
+        trip-type-val (if (= (:tripType field-values) "OneWay") "OneWay" "RoundTrip")
+        today-str (get-jst-today-str)
+        outbound-val (or (:outboundDate field-values)
+                         (.ToString (.AddMonths DateTime/UtcNow 1) "yyyy-MM-dd"))
+        inbound-val (or (:inboundDate field-values)
+                        (.ToString (.AddDays (.AddMonths DateTime/UtcNow 1) 7.0) "yyyy-MM-dd"))
+        max-stops-val (or (:maxStops field-values) "Any")
+        target-price-val (or (:targetPriceJpy field-values) "")
+        default-interval-str (str (or default-check-interval 12))
+        interval-val (or (:checkIntervalHours field-values) default-interval-str)
+        notes-val (or (:userNotes field-values) "")
+        use-webhook? (if (contains? field-values :useDefaultWebhook)
+                       (boolean (:useDefaultWebhook field-values))
+                       true)
+        show-browser? (boolean (:showBrowser field-values))]
+    [:div {:class "space-y-4 text-xs"}
+     ;; 1. 旅行タイプ切り替えボタン
+     [:div
+      [:label {:class "block text-slate-400 font-medium mb-1"} "旅行タイプ *"]
+      [:div {:class "grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800"}
+       [:button {:type "button"
+                 :id "btnRoundTrip"
+                 :class (if (= trip-type-val "RoundTrip")
+                          "py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition"
+                          "py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
+                 :onclick "document.getElementById('formTripType').value='RoundTrip'; document.getElementById('btnRoundTrip').className='py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnOneWay').className='py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='block';"}
+        "往復"]
+       [:button {:type "button"
+                 :id "btnOneWay"
+                 :class (if (= trip-type-val "OneWay")
+                          "py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition"
+                          "py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
+                 :onclick "document.getElementById('formTripType').value='OneWay'; document.getElementById('btnOneWay').className='py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnRoundTrip').className='py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='none';"}
+        "片道"]]
+      [:input {:type "hidden" :id "formTripType" :name "tripType" :value trip-type-val}]]
+
+     ;; 2 & 3. 空港選択 (Datalist サポート)
+     [:div {:class "grid grid-cols-2 gap-3"}
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1"} "出発地 (都市名またはIATA) *"]
+       [:input {:list "airportsList"
+                :type "text"
+                :id "form-origin"
+                :name "origin"
+                :required true
+                :value origin-val
+                :placeholder "HND - 東京(羽田)"
+                :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1"} "目的地 (都市名またはIATA) *"]
+       [:input {:list "airportsList"
+                :type "text"
+                :id "form-destination"
+                :name "destination"
+                :required true
+                :value dest-val
+                :placeholder "CDG - パリ(シャルル・ド・ゴール)"
+                :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
+
+     airports-datalist
+
+     ;; 4 & 5. 日程入力
+     [:div {:class "grid grid-cols-2 gap-3"}
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1 flex items-center gap-1.5"}
+        [:i {:class "fa-regular fa-calendar text-sky-400 text-xs"}]
+        "往路出発日 *"]
+       [:div {:class "relative"}
+        [:input {:id "form-outbound"
+                 :type "date"
+                 :name "outboundDate"
+                 :required true
+                 :value outbound-val
+                 :min today-str
+                 :class "w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
+      [:div {:id "inboundDateContainer"
+             :style (if (= trip-type-val "OneWay") "display: none;" "")}
+       [:label {:class "block text-slate-400 font-medium mb-1 flex items-center gap-1.5"}
+        [:i {:class "fa-regular fa-calendar text-indigo-400 text-xs"}]
+        "復路出発日"]
+       [:div {:class "relative"}
+        [:input {:id "form-inbound"
+                 :type "date"
+                 :name "inboundDate"
+                 :value inbound-val
+                 :min today-str
+                 :class "w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]]
+
+     ;; 6 & 7. 乗継・巡回間隔
+     [:div {:class "grid grid-cols-2 gap-3"}
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1"} "許容乗継回数 (Max Stops)"]
+       [:select {:id "form-max-stops"
+                 :name "maxStops"
+                 :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
+        [:option (merge {:value "Any"} (when (= max-stops-val "Any") {:selected true})) "乗継制限なし (最安重視・推奨)"]
+        [:option (merge {:value "OneStop"} (when (= max-stops-val "OneStop") {:selected true})) "1回乗継まで"]
+        [:option (merge {:value "DirectOnly"} (when (= max-stops-val "DirectOnly") {:selected true})) "直行便のみ (0回乗継)"]]]
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1"} "巡回間隔"]
+       [:select {:name "checkIntervalHours"
+                 :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
+        [:option (merge {:value default-interval-str} (when (= interval-val default-interval-str) {:selected true})) (str "全体設定に従う (現在 " default-interval-str "h)")]
+        [:option (merge {:value "3"} (when (= interval-val "3") {:selected true})) "3時間ごと"]
+        [:option (merge {:value "6"} (when (= interval-val "6") {:selected true})) "6時間ごと"]
+        [:option (merge {:value "12"} (when (= interval-val "12") {:selected true})) "12時間ごと"]
+        [:option (merge {:value "24"} (when (= interval-val "24") {:selected true})) "24時間ごと"]]]]
+
+     ;; 8 & 9. 目標価格 & タスク名
+     [:div {:class "grid grid-cols-2 gap-3"}
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1"} "目標アラート価格 (JPY)"]
+       [:input {:id "form-target-price"
+                :type "number"
+                :name "targetPriceJpy"
+                :value target-price-val
+                :placeholder "例: 160000"
+                :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
+      [:div
+       [:label {:class "block text-slate-400 font-medium mb-1"} "タスク名 (任意)"]
+       [:input {:id "form-title"
+                :type "text"
+                :name "title"
+                :value task-title
+                :placeholder "例: ゴールデンウィーク パリ旅行"
+                :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
+
+     ;; 10. 構造化メモ
+     [:div
+      [:label {:class "block text-slate-400 font-medium mb-1"} "構造化メモ / 要望・制約（任意）"]
+      [:textarea {:id "form-notes"
+                  :name "userNotes"
+                  :rows "2"
+                  :placeholder "例: - 荷物制限なし希望\n- ホテル最寄り空港優先"
+                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none resize-y"}
+       notes-val]]
+
+     ;; 11 & 12. Webhook 設定 & ブラウザ表示
+     [:div {:class "p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2"}
+      [:label {:class "flex items-center space-x-2 text-slate-300 cursor-pointer"}
+       [:input (merge {:type "checkbox"
+                       :name "useDefaultWebhook"
+                       :value "true"
+                       :class "rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"}
+                      (when use-webhook? {:checked true}))]
+       [:span "デフォルトの Discord / Slack Webhook に通知する"]]
+      [:label {:class "flex items-center space-x-2 text-slate-300 cursor-pointer"}
+       [:input (merge {:type "checkbox"
+                       :name "showBrowser"
+                       :value "true"
+                       :class "rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"}
+                      (when show-browser? {:checked true}))]
+       [:span {:class "text-sky-300 font-medium"} "定期巡回時もブラウザを表示する (手動支援モード)"]]]]))
+
+;; 1. タスク登録・編集モーダル (共通フォーム部品を活用)
 (defn render-task-modal
-  ([task-opt] (render-task-modal task-opt nil nil))
-  ([task-opt initial-params] (render-task-modal task-opt initial-params nil))
-  ([task-opt initial-params error-msg]
+  ([task-opt] (render-task-modal task-opt nil nil "12"))
+  ([task-opt initial-params] (render-task-modal task-opt initial-params nil "12"))
+  ([task-opt initial-params error-msg] (render-task-modal task-opt initial-params error-msg "12"))
+  ([task-opt initial-params error-msg default-interval]
    (let [is-edit (some? task-opt)
          title (if is-edit "タスク設定の変更" "新規フライト監視タスク登録")
-         origin-val (or (when task-opt (domain/iata-code-value (:origin task-opt)))
-                        (:origin initial-params) "")
-         dest-val (or (when task-opt (domain/iata-code-value (:destination task-opt)))
-                      (:destination initial-params) "")
-         task-title (or (when task-opt (:title task-opt))
-                        (:title initial-params) "")
-         trip-type-val (cond
-                         task-opt (if (= (:kind (:trip-type task-opt)) :one-way) "OneWay" "RoundTrip")
-                         (:tripType initial-params) (:tripType initial-params)
-                         :else "RoundTrip")
-         outbound-val (or (when task-opt
-                            (when-let [ob (or (:outbound (:trip-type task-opt)) (:outbound-date (:trip-type task-opt)))]
-                              (.ToString ^DateOnly ob "yyyy-MM-dd")))
-                          (:outboundDate initial-params)
-                          (.ToString (.AddMonths DateTime/UtcNow 1) "yyyy-MM-dd"))
-         inbound-val (or (when task-opt
-                           (when-let [ib (or (:inbound (:trip-type task-opt)) (:inbound-date (:trip-type task-opt)))]
-                             (.ToString ^DateOnly ib "yyyy-MM-dd")))
-                         (:inboundDate initial-params)
-                         (.ToString (.AddDays (.AddMonths DateTime/UtcNow 1) 7.0) "yyyy-MM-dd"))
-         max-stops-val (cond
-                         task-opt (case (:max-stops task-opt)
-                                    :direct-only "DirectOnly"
-                                    :one-stop "OneStop"
-                                    "Any")
-                         (:maxStops initial-params) (:maxStops initial-params)
-                         :else "Any")
-         target-price-val (or (when task-opt
-                                (when-let [tp (:target-price-jpy task-opt)] (str tp)))
-                              (:targetPriceJpy initial-params)
-                              (:maxPriceJpy initial-params)
-                              "")
-         interval-val (or (when task-opt (str (or (:check-interval-hours task-opt) 12)))
-                          (:checkIntervalHours initial-params)
-                          "12")
-         webhook-val (or (when task-opt (:notification-webhook-url task-opt))
-                         (:webhookUrl initial-params)
-                         "")
-         notes-val (or (when task-opt (:user-notes task-opt))
-                       (:notes initial-params)
-                       "")
+         field-values (extract-task-field-values task-opt initial-params)
          post-url (if task-opt
                     (str "/api/tasks/" (:id task-opt))
                     "/api/tasks")]
@@ -101,141 +262,8 @@
           [:div {:class "p-3 bg-rose-950/80 border border-rose-800 rounded-lg text-rose-300 text-xs"}
            error-msg])
 
-        ;; 旅行タイプ切り替えボタン
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "旅行タイプ"]
-         [:div {:class "grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800"}
-          [:button {:type "button"
-                    :id "btnRoundTrip"
-                    :class (if (= trip-type-val "RoundTrip")
-                             "py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition"
-                             "py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
-                    :onclick "document.getElementById('formTripType').value='RoundTrip'; document.getElementById('btnRoundTrip').className='py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnOneWay').className='py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='block';"}
-           "往復"]
-          [:button {:type "button"
-                    :id "btnOneWay"
-                    :class (if (= trip-type-val "OneWay")
-                             "py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition"
-                             "py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
-                    :onclick "document.getElementById('formTripType').value='OneWay'; document.getElementById('btnOneWay').className='py-1.5 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnRoundTrip').className='py-1.5 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='none';"}
-           "片道"]]
-         [:input {:type "hidden" :id "formTripType" :name "tripType" :value trip-type-val}]]
-
-        ;; 空港選択 (Datalist サポート)
-        [:div {:class "grid grid-cols-2 gap-3"}
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1"} "出発地 (都市名またはIATA) *"]
-          [:input {:list "airportsList"
-                   :type "text"
-                   :id "form-origin"
-                   :name "origin"
-                   :required true
-                   :value origin-val
-                   :placeholder "HND - 東京(羽田)"
-                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1"} "目的地 (都市名またはIATA) *"]
-          [:input {:list "airportsList"
-                   :type "text"
-                   :id "form-destination"
-                   :name "destination"
-                   :required true
-                   :value dest-val
-                   :placeholder "CDG - パリ(シャルル・ド・ゴール)"
-                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
-
-        airports-datalist
-
-        ;; 日程入力
-        [:div {:class "grid grid-cols-2 gap-3"}
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1 flex items-center gap-1.5"}
-           [:i {:class "fa-regular fa-calendar text-sky-400 text-xs"}]
-           "往路出発日 *"]
-          [:div {:class "relative"}
-           [:input {:id "form-outbound"
-                    :type "date"
-                    :name "outboundDate"
-                    :required true
-                    :value outbound-val
-                    :class "w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
-         [:div {:id "inboundDateContainer"
-                :style (if (= trip-type-val "OneWay") "display: none;" "")}
-          [:label {:class "block text-slate-400 font-medium mb-1 flex items-center gap-1.5"}
-           [:i {:class "fa-regular fa-calendar text-indigo-400 text-xs"}]
-           "復路出発日"]
-          [:div {:class "relative"}
-           [:input {:id "form-inbound"
-                    :type "date"
-                    :name "inboundDate"
-                    :value inbound-val
-                    :class "w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]]
-
-        ;; 乗継・巡回間隔
-        [:div {:class "grid grid-cols-2 gap-3"}
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1"} "許容乗継回数 (Max Stops)"]
-          [:select {:id "form-max-stops"
-                    :name "maxStops"
-                    :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
-           [:option (merge {:value "Any"} (when (= max-stops-val "Any") {:selected true})) "乗継制限なし (最安重視・推奨)"]
-           [:option (merge {:value "OneStop"} (when (= max-stops-val "OneStop") {:selected true})) "1回乗継まで"]
-           [:option (merge {:value "DirectOnly"} (when (= max-stops-val "DirectOnly") {:selected true})) "直行便のみ (0回乗継)"]]]
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1"} "巡回間隔"]
-          [:select {:name "checkIntervalHours"
-                    :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
-           [:option (merge {:value "12"} (when (= interval-val "12") {:selected true})) "全体設定に従う (現在 12h)"]
-           [:option (merge {:value "3"} (when (= interval-val "3") {:selected true})) "3時間ごと"]
-           [:option (merge {:value "6"} (when (= interval-val "6") {:selected true})) "6時間ごと"]
-           [:option (merge {:value "12"} (when (= interval-val "12") {:selected true})) "12時間ごと"]
-           [:option (merge {:value "24"} (when (= interval-val "24") {:selected true})) "24時間ごと"]]]]
-
-        ;; 目標価格 & タスク名
-        [:div {:class "grid grid-cols-2 gap-3"}
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1"} "目標アラート価格 (JPY)"]
-          [:input {:id "form-target-price"
-                   :type "number"
-                   :name "targetPriceJpy"
-                   :value target-price-val
-                   :placeholder "例: 160000"
-                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
-         [:div
-          [:label {:class "block text-slate-400 font-medium mb-1"} "タスク名 (任意)"]
-          [:input {:id "form-title"
-                   :type "text"
-                   :name "title"
-                   :value task-title
-                   :placeholder "例: ゴールデンウィーク パリ旅行"
-                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
-
-        ;; メモ
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "構造化メモ / 要望・制約（任意）"]
-         [:textarea {:id "form-notes"
-                     :name "userNotes"
-                     :rows "2"
-                     :placeholder "例: - 荷物制限なし希望\n- ホテル最寄り空港優先"
-                     :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none resize-y"}
-          notes-val]]
-
-        ;; Webhook 設定 & ブラウザ表示
-        [:div {:class "p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2"}
-         [:label {:class "flex items-center space-x-2 text-slate-300 cursor-pointer"}
-          [:input {:type "checkbox"
-                   :name "useDefaultWebhook"
-                   :value "true"
-                   :checked true
-                   :class "rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"}]
-          [:span "デフォルトの Discord / Slack Webhook に通知する"]]
-         [:label {:class "flex items-center space-x-2 text-slate-300 cursor-pointer"}
-          [:input (merge {:type "checkbox"
-                          :name "showBrowser"
-                          :value "true"
-                          :class "rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"}
-                         (when (and task-opt (not (:is-headless task-opt))) {:checked true}))]
-          [:span {:class "text-sky-300 font-medium"} "定期巡回時もブラウザを表示する (手動支援モード)"]]]
+        ;; 共通フォームフィールド12項目
+        (render-task-form-fields field-values {:is-edit is-edit :default-check-interval default-interval})
 
         ;; アクションボタン
         [:div {:class "pt-3 border-t border-slate-800 flex justify-end space-x-2"}
@@ -515,132 +543,46 @@
          "閉じる"]]])))
 
 ;; 6. スタンドアロン新規タスク登録画面 (/tasks/new)
-(defn render-standalone-new-task-page [query-params]
-  (let [origin (or (:origin query-params) "")
-        destination (or (:destination query-params) "")
-        outbound-date (or (:outboundDate query-params) "")
-        inbound-date (or (:inboundDate query-params) "")
-        trip-type (or (:tripType query-params) "RoundTrip")
-        max-stops (or (:maxStops query-params) "Any")
-        max-price (or (:maxPriceJpy query-params) "")
-        notes (or (:notes query-params) "")]
-    [:div {:class "max-w-2xl mx-auto py-8 px-4"}
-     [:div {:class "bg-slate-950 rounded-2xl shadow-2xl border border-slate-800 p-6 md:p-8 space-y-6 text-slate-100"}
-      [:div {:class "flex items-center justify-between border-b border-slate-800 pb-4"}
-       [:div {:class "flex items-center gap-3"}
-        [:span {:class "w-10 h-10 rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400"}
-         [:i {:class "fa-solid fa-plane-departure text-lg"}]]
-        [:div
-         [:h2 {:class "text-lg font-bold text-white"} "新規フライト監視タスク登録"]
-         [:p {:class "text-xs text-slate-400"} "AI解析によって抽出された条件をご確認・調整の上、登録してください。"]]]
-       [:a {:href "/"
-            :class "text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 transition flex items-center gap-1.5"}
-        [:i {:class "fa-solid fa-arrow-left text-[10px]"}]
-        "ダッシュボードへ戻る"]]
+(defn render-standalone-new-task-page
+  ([query-params] (render-standalone-new-task-page query-params nil "12"))
+  ([query-params error-msg] (render-standalone-new-task-page query-params error-msg "12"))
+  ([query-params error-msg default-interval]
+   (let [field-values (extract-task-field-values nil query-params)]
+     [:div {:class "max-w-2xl mx-auto py-8 px-4"}
+      [:div {:class "bg-slate-950 rounded-2xl shadow-2xl border border-slate-800 p-6 md:p-8 space-y-6 text-slate-100"}
+       [:div {:class "flex items-center justify-between border-b border-slate-800 pb-4"}
+        [:div {:class "flex items-center gap-3"}
+         [:span {:class "w-10 h-10 rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400"}
+          [:i {:class "fa-solid fa-plane-departure text-lg"}]]
+         [:div
+          [:h2 {:class "text-lg font-bold text-white"} "新規フライト監視タスク登録"]
+          [:p {:class "text-xs text-slate-400"} "AI解析によって抽出された条件をご確認・調整の上、登録してください。"]]]
+        [:button {:type "button"
+                  :onclick "if (window.opener) { window.close(); } else { window.location.href='/'; }"
+                  :class "text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 transition flex items-center gap-1.5"}
+         [:i {:class "fa-solid fa-arrow-left text-[10px]"}]
+         "ダッシュボードへ戻る"]]
 
-      [:form {:action "/api/tasks/standalone"
-              :method "post"
-              :class "space-y-5 text-xs"}
-       ;; 旅行タイプ切り替え
-       [:div
-        [:label {:class "block text-slate-400 font-medium mb-1"} "旅行タイプ"]
-        [:div {:class "grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800"}
+       (when error-msg
+         [:div {:class "p-3 bg-rose-950/80 border border-rose-800 rounded-lg text-rose-300 text-xs"}
+          error-msg])
+
+       [:form {:action "/api/tasks/standalone"
+               :method "post"
+               :class "space-y-5 text-xs"}
+        ;; 共通フォームフィールド12項目 (手動登録モーダルと完全一致)
+        (render-task-form-fields field-values {:default-check-interval default-interval})
+
+        ;; アクションボタン
+        [:div {:class "pt-4 border-t border-slate-800 flex items-center justify-end space-x-3"}
          [:button {:type "button"
-                   :id "btnRoundTrip"
-                   :class (if (not= trip-type "OneWay") "py-2 text-center rounded-md font-medium bg-sky-600 text-white transition" "py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
-                   :onclick "document.getElementById('formTripType').value='RoundTrip'; document.getElementById('btnRoundTrip').className='py-2 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnOneWay').className='py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='block';"}
-          "往復"]
-         [:button {:type "button"
-                   :id "btnOneWay"
-                   :class (if (= trip-type "OneWay") "py-2 text-center rounded-md font-medium bg-sky-600 text-white transition" "py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition")
-                   :onclick "document.getElementById('formTripType').value='OneWay'; document.getElementById('btnOneWay').className='py-2 text-center rounded-md font-medium bg-sky-600 text-white transition'; document.getElementById('btnRoundTrip').className='py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition'; document.getElementById('inboundDateContainer').style.display='none';"}
-          "片道"]]
-        [:input {:type "hidden" :id "formTripType" :name "tripType" :value (if (= trip-type "OneWay") "OneWay" "RoundTrip")}]]
-
-       ;; 空港選択
-       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "出発地 (都市名またはIATA) *"]
-         [:input {:list "airportsList"
-                  :type "text"
-                  :name "origin"
-                  :required true
-                  :value origin
-                  :placeholder "HND - 東京(羽田)"
-                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "目的地 (都市名またはIATA) *"]
-         [:input {:list "airportsList"
-                  :type "text"
-                  :name "destination"
-                  :required true
-                  :value destination
-                  :placeholder "MNL - マニラ"
-                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
-
-       airports-datalist
-
-       ;; 日程入力
-       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "往路出発日 *"]
-         [:input {:type "date"
-                  :name "outboundDate"
-                  :required true
-                  :value outbound-date
-                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
-        [:div {:id "inboundDateContainer"
-               :style (if (= trip-type "OneWay") "display: none;" "")}
-         [:label {:class "block text-slate-400 font-medium mb-1"} "復路出発日"]
-         [:input {:type "date"
-                  :name "inboundDate"
-                  :value inbound-date
-                  :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]]
-
-       ;; 乗継・巡回間隔
-       [:div {:class "grid grid-cols-1 md:grid-cols-2 gap-4"}
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "許容乗継回数"]
-         [:select {:name "maxStops"
-                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
-          [:option (merge {:value "Any"} (when (= max-stops "Any") {:selected true})) "乗継制限なし (最安重視)"]
-          [:option (merge {:value "OneStop"} (when (= max-stops "OneStop") {:selected true})) "1回乗継まで"]
-          [:option (merge {:value "DirectOnly"} (when (= max-stops "DirectOnly") {:selected true})) "直行便のみ"]]]
-        [:div
-         [:label {:class "block text-slate-400 font-medium mb-1"} "巡回間隔"]
-         [:select {:name "checkIntervalHours"
-                   :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
-          [:option {:value "12" :selected true} "全体設定に従う (現在 12h)"]
-          [:option {:value "3"} "3時間ごと"]
-          [:option {:value "6"} "6時間ごと"]
-          [:option {:value "12"} "12時間ごと"]
-          [:option {:value "24"} "24時間ごと"]]]]
-
-       ;; 目標価格
-       [:div
-        [:label {:class "block text-slate-400 font-medium mb-1"} "目標アラート価格 (JPY)"]
-        [:input {:type "number"
-                 :name "targetPriceJpy"
-                 :value max-price
-                 :placeholder "例: 90000"
-                 :class "w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}]]
-
-       ;; メモ
-       [:div
-        [:label {:class "block text-slate-400 font-medium mb-1"} "メモ・要望"]
-        [:textarea {:name "userNotes"
-                    :rows "3"
-                    :placeholder "メモや要望を自由に入力"
-                    :class "w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"}
-         notes]]
-
-       [:div {:class "pt-4 border-t border-slate-800 flex justify-end space-x-3"}
-        [:a {:href "/"
-             :class "px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition"}
-         "キャンセル"]
-        [:button {:type "submit"
-                  :class "px-5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold shadow transition"}
-         "タスクを登録して監視開始"]]]]]))
+                   :onclick "if (window.opener) { window.close(); } else { window.location.href='/'; }"
+                   :class "px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition text-center"}
+          "キャンセル"]
+         [:button {:type "submit"
+                   :class "px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold shadow-md transition flex items-center gap-2"}
+          [:i {:class "fa-solid fa-plane-departure"}]
+          "登録して巡回開始"]]]]])))
 
 ;; 互換性エイリアス
 (def render-timeline-modal render-detail-modal)

@@ -65,3 +65,34 @@
 4. **実装時の注意事項確認**:
    - `render-task-form-fields` は `<form>` タグを含まない純粋関数として切り出すこと。
    - タスク編集時（`is-edit` モード）において `webhook_url` が `"DISABLED"` の場合にチェックボックスを OFF で初期表示する逆変換処理を組み込むこと。
+
+---
+
+## 5. 【Step 3: 実装・検証】のサブエージェントレビュー結果および対応記録
+
+- **レビュー日時**: 2026-09-13 01:19
+- **レビュアー**: サブエージェント（Architecture & Code Quality Reviewer）
+- **総合判定**: **【条件付き合意推奨 (LGTM with Recommendations)】**
+
+### 主な評価
+
+1. **DRY原則の徹底**:
+   - `modals.clj` に `render-task-form-fields` を新設し、全12項目の入力フィールド生成を一本化。コピペ負債を根絶。
+2. **Webhook無効化（DISABLEDセンチネル）**:
+   - DBスキーマ変更なしで、未チェック時に `"DISABLED"` を記録。`notification.clj` で確実に通知スキップを実行。
+3. **スタンドアロン画面のエラーリカバリ**:
+   - バリデーションエラー時に白画面化せず、入力値を保持して完全なページHTML（HTTP 400）を再レンダリング。
+4. **AI解析パイプラインの完全連携**:
+   - `ai_client.clj` ➔ `api_controller.clj` ➔ `layout.clj` ➔ `modals.clj` の全経路で `title`, `maxStops`, `userNotes`, `targetPriceJpy` を漏れなく伝達。
+5. **テスト網羅性**:
+   - 全22スイート、518アサーション通過 (fail: 0, error: 0)、Overall カバレッジ **94.9%** を達成。
+
+### レビュー提案事項への対応結果
+
+1. **【提案1: 既存タスク編集時（`POST /api/tasks/:id`）におけるチェックボックスOFF判定の堅牢化】**
+   - **内容**: HTML仕様上、チェックボックス未チェック時はキー自体が送信されないため、タスク編集送信（`is-full-form`）時に未送信であればユーザーがチェックを外したと判断して `"DISABLED"` および `is-headless: true` へ確実に更新するロジックを実装。
+   - **対応結果**: `api_controller.clj` に反映し、単体テスト `test-update-task-post` にてチェック外し時の `"DISABLED"` 保存および `is-headless: false` 更新を検証・パス。
+2. **【提案2: システム全体設定（巡回間隔）の動的反映】**
+   - **内容**: `render-task-modal` および `render-standalone-new-task-page` に `default-interval` オプションを渡せるシグネチャを拡張し、コントローラ（`server.clj`, `api_controller.clj`）からシステム設定の `default-check-interval-hours` を渡して「全体設定に従う (現在 6h/12h)」の動的表示を完全連動。
+   - **対応結果**: `modals.clj`, `server.clj`, `api_controller.clj` を更新し、全テストパスを確認。
+

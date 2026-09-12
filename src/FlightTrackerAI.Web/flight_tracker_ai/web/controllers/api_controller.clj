@@ -7,6 +7,7 @@
             [flight-tracker-ai.infrastructure.scraper-common :as scraper-common]
             [flight-tracker-ai.infrastructure.scraping-worker :as worker]
             [flight-tracker-ai.infrastructure.app-logger :as logger]
+            [flight-tracker-ai.web.views.layout :as layout]
             [flight-tracker-ai.web.views.dashboard :as dash]
             [flight-tracker-ai.web.views.modals :as modals]
             [flight-tracker-ai.web.views.html-dsl :as h]
@@ -60,6 +61,56 @@
 (defn- get-jst-today []
   (DateOnly/FromDateTime (.DateTime (.ToOffset (DateTimeOffset/UtcNow) (TimeSpan/FromHours 9.0)))))
 
+(defn- build-task-item-from-form [form origin-res dest-res]
+  (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
+        outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (get-jst-today)))
+        inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
+        trip (if is-round
+               {:kind :round-trip
+                :outbound outbound
+                :outbound-date outbound
+                :inbound inbound
+                :inbound-date inbound}
+               {:kind :one-way
+                :outbound outbound
+                :outbound-date outbound})
+        target-price (when-not (str/blank? (:targetPriceJpy form))
+                       (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
+        interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
+        max-stops (case (:maxStops form)
+                    "DirectOnly" :direct-only
+                    "OneStop" :one-stop
+                    :any-stops)
+        now (DateTimeOffset/UtcNow)
+        task-title (if-not (str/blank? (:title form))
+                     (:title form)
+                     (str (:ok origin-res) " ➔ " (:ok dest-res)))
+        webhook-url (if (or (= (:useDefaultWebhook form) "true")
+                            (= (:useDefaultWebhook form) "on"))
+                      (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
+                      "DISABLED")]
+    {:id (Guid/NewGuid)
+     :title task-title
+     :origin (:ok origin-res)
+     :destination (:ok dest-res)
+     :trip-type trip
+     :max-stops max-stops
+     :preferred-airlines []
+     :target-price-jpy target-price
+     :check-interval-hours interval
+     :notification-webhook-url webhook-url
+     :user-notes (when-not (str/blank? (:userNotes form)) (:userNotes form))
+     :is-headless (not= (:showBrowser form) "true")
+     :status :active
+     :consecutive-failures 0
+     :created-at now
+     :updated-at now
+     :last-checked-at nil
+     :last-lowest-price-jpy nil
+     :last-lowest-airlines nil
+     :last-lowest-provider nil
+     :ai-analysis-summary nil}))
+
 (defn handle-api-request [^String connection-string ^String method ^String raw-url ^String body-str]
   (let [uri (try (Uri. (str "http://localhost" raw-url)) (catch Exception _ (Uri. "http://localhost/")))
         path (.AbsolutePath uri)
@@ -79,26 +130,36 @@
 
       ;; 2. GET /api/tasks/new-modal
       (and (= method "GET") (= path "/api/tasks/new-modal"))
-      (let [prompt (:prompt query)]
+      (let [settings (settings-repo/get-settings connection-string)
+            interval-str (str (:default-check-interval-hours settings))
+            prompt (:prompt query)]
         (if (and prompt (not (str/blank? prompt)))
-          (let [settings (settings-repo/get-settings connection-string)
-                client (HttpClient.)
+          (let [client (HttpClient.)
                 ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (get-jst-today))
                 params (if (:ok ai-res)
-                         {:origin (:Origin (:ok ai-res))
-                          :destination (:Destination (:ok ai-res))
-                          :tripType (:TripType (:ok ai-res))
-                          :outboundDate (:OutboundDate (:ok ai-res))
-                          :inboundDate (:InboundDate (:ok ai-res))
-                          :targetPriceJpy (:MaxPriceJpy (:ok ai-res))
-                          :notes (:Notes (:ok ai-res))}
-                         {:notes prompt})]
+                         (let [ai-data (:ok ai-res)
+                               orig (:Origin ai-data)
+                               dest (:Destination ai-data)
+                               ttl (or (:Title ai-data)
+                                       (when (and (not (str/blank? orig)) (not (str/blank? dest)))
+                                         (str orig " ➔ " dest)))]
+                           {:origin orig
+                            :destination dest
+                            :tripType (:TripType ai-data)
+                            :outboundDate (:OutboundDate ai-data)
+                            :inboundDate (:InboundDate ai-data)
+                            :maxStops (:MaxStops ai-data)
+                            :targetPriceJpy (:MaxPriceJpy ai-data)
+                            :title ttl
+                            :userNotes (:Notes ai-data)
+                            :notes (:Notes ai-data)})
+                         {:userNotes prompt :notes prompt})]
             {:status 200
              :content-type "text/html; charset=utf-8"
-             :body (h/render-html (modals/render-task-modal nil params))})
+             :body (h/render-html (modals/render-task-modal nil params nil interval-str))})
           {:status 200
            :content-type "text/html; charset=utf-8"
-           :body (h/render-html (modals/render-task-modal nil {}))}))
+           :body (h/render-html (modals/render-task-modal nil {} nil interval-str))}))
 
       ;; 3. GET /api/tasks/:id/modal (編集モーダル)
       (and (= method "GET")
@@ -173,54 +234,12 @@
             origin-res (domain/create-iata-code clean-origin)
             dest-res (domain/create-iata-code clean-dest)]
         (if (or (:error origin-res) (:error dest-res))
-          {:status 200
-           :content-type "text/html; charset=utf-8"
-           :body (h/render-html (modals/render-task-modal nil form (or (:error origin-res) (:error dest-res))))}
-          (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
-                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (get-jst-today)))
-                inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
-                trip (if is-round
-                       {:kind :round-trip
-                        :outbound outbound
-                        :outbound-date outbound
-                        :inbound inbound
-                        :inbound-date inbound}
-                       {:kind :one-way
-                        :outbound outbound
-                        :outbound-date outbound})
-                target-price (when-not (str/blank? (:targetPriceJpy form))
-                               (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
-                settings (settings-repo/get-settings connection-string)
-                interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
-                max-stops (case (:maxStops form)
-                            "DirectOnly" :direct-only
-                            "OneStop" :one-stop
-                            :any-stops)
-                now (DateTimeOffset/UtcNow)
-                task-title (if-not (str/blank? (:title form))
-                             (:title form)
-                             (str (:ok origin-res) " ➔ " (:ok dest-res)))
-                task-item {:id (Guid/NewGuid)
-                           :title task-title
-                           :origin (:ok origin-res)
-                           :destination (:ok dest-res)
-                           :trip-type trip
-                           :max-stops max-stops
-                           :preferred-airlines []
-                           :target-price-jpy target-price
-                           :check-interval-hours interval
-                           :notification-webhook-url (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
-                           :user-notes (when-not (str/blank? (:userNotes form)) (:userNotes form))
-                           :is-headless (not= (:showBrowser form) "true")
-                           :status :active
-                           :consecutive-failures 0
-                           :created-at now
-                           :updated-at now
-                           :last-checked-at nil
-                           :last-lowest-price-jpy nil
-                           :last-lowest-airlines nil
-                           :last-lowest-provider nil
-                           :ai-analysis-summary nil}]
+          (let [settings (settings-repo/get-settings connection-string)
+                interval-str (str (:default-check-interval-hours settings))]
+            {:status 200
+             :content-type "text/html; charset=utf-8"
+             :body (h/render-html (modals/render-task-modal nil form (or (:error origin-res) (:error dest-res)) interval-str))})
+          (let [task-item (build-task-item-from-form form origin-res dest-res)]
             (task-repo/create-task connection-string task-item)
             (let [all-tasks (task-repo/get-all-tasks connection-string)
                   node (dash/render-dashboard all-tasks "card" "all" "")]
@@ -229,7 +248,6 @@
                :content-type "text/html; charset=utf-8"
                :body (h/render-html (render-with-modal-close node "新規タスクを登録しました！"))}))))
 
-
       ;; 8. POST /api/tasks/standalone (スタンドアロン登録画面用)
       (and (= method "POST") (= path "/api/tasks/standalone"))
       (let [clean-origin (extract-iata-code (:origin form))
@@ -237,49 +255,12 @@
             origin-res (domain/create-iata-code clean-origin)
             dest-res (domain/create-iata-code clean-dest)]
         (if (or (:error origin-res) (:error dest-res))
-          {:status 400
-           :content-type "text/html; charset=utf-8"
-           :body (str "<p class='text-rose-400'>エラー: " (or (:error origin-res) (:error dest-res)) "</p>")}
-          (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
-                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (get-jst-today)))
-                inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
-                trip (if is-round
-                       {:kind :round-trip
-                        :outbound outbound
-                        :outbound-date outbound
-                        :inbound inbound
-                        :inbound-date inbound}
-                       {:kind :one-way
-                        :outbound outbound
-                        :outbound-date outbound})
-                target-price (when-not (str/blank? (:targetPriceJpy form))
-                               (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
-                interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
-                now (DateTimeOffset/UtcNow)
-                task-item {:id (Guid/NewGuid)
-                           :title (if-not (str/blank? (:title form)) (:title form) (str (:ok origin-res) " ➔ " (:ok dest-res)))
-                           :origin (:ok origin-res)
-                           :destination (:ok dest-res)
-                           :trip-type trip
-                           :max-stops (case (:maxStops form)
-                                        "DirectOnly" :direct-only
-                                        "OneStop" :one-stop
-                                        :any-stops)
-                           :preferred-airlines []
-                           :target-price-jpy target-price
-                           :check-interval-hours interval
-                           :notification-webhook-url (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
-                           :user-notes (when-not (str/blank? (:userNotes form)) (:userNotes form))
-                           :is-headless (not= (:showBrowser form) "true")
-                           :status :active
-                           :consecutive-failures 0
-                           :created-at now
-                           :updated-at now
-                           :last-checked-at nil
-                           :last-lowest-price-jpy nil
-                           :last-lowest-airlines nil
-                           :last-lowest-provider nil
-                           :ai-analysis-summary nil}]
+          (let [settings (settings-repo/get-settings connection-string)
+                interval-str (str (:default-check-interval-hours settings))]
+            {:status 400
+             :content-type "text/html; charset=utf-8"
+             :body (layout/base-layout "新規タスク登録" (modals/render-standalone-new-task-page form (or (:error origin-res) (:error dest-res)) interval-str))})
+          (let [task-item (build-task-item-from-form form origin-res dest-res)]
             (task-repo/create-task connection-string task-item)
             {:status 200
              :content-type "text/html; charset=utf-8"
@@ -312,15 +293,41 @@
                                    (try (long (read-string (:targetPriceJpy form))) (catch Exception _ (:target-price-jpy t)))
                                    (:target-price-jpy t))
                     interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ (:check-interval-hours t)))
+                    updated-stops (if-let [ms (:maxStops form)]
+                                    (case ms
+                                      "DirectOnly" :direct-only
+                                      "OneStop" :one-stop
+                                      :any-stops)
+                                    (:max-stops t))
+                    is-full-form (or (some? (:origin form)) (some? (:title form)))
+                    updated-webhook (if is-full-form
+                                      (if (or (= (:useDefaultWebhook form) "true") (= (:useDefaultWebhook form) "on"))
+                                        (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
+                                        "DISABLED")
+                                      (cond
+                                        (some? (:useDefaultWebhook form))
+                                        (if (or (= (:useDefaultWebhook form) "true") (= (:useDefaultWebhook form) "on"))
+                                          (when-not (str/blank? (:webhookUrl form)) (:webhookUrl form))
+                                          "DISABLED")
+                                        (not (str/blank? (:webhookUrl form)))
+                                        (:webhookUrl form)
+                                        :else
+                                        (:notification-webhook-url t)))
+                    updated-headless (if is-full-form
+                                       (not (or (= (:showBrowser form) "true") (= (:showBrowser form) "on")))
+                                       (if (some? (:showBrowser form))
+                                         (not= (:showBrowser form) "true")
+                                         (:is-headless t)))
                     updated-t (assoc t
                                      :title (or (:title form) (:title t))
                                      :origin (:ok origin-res)
                                      :destination (:ok dest-res)
+                                     :max-stops updated-stops
                                      :target-price-jpy target-price
                                      :check-interval-hours interval
-                                     :notification-webhook-url (if-not (str/blank? (:webhookUrl form)) (:webhookUrl form) (:notification-webhook-url t))
+                                     :notification-webhook-url updated-webhook
                                      :user-notes (if-not (nil? (:userNotes form)) (:userNotes form) (:user-notes t))
-                                     :is-headless (if (some? (:showBrowser form)) (not= (:showBrowser form) "true") (:is-headless t))
+                                     :is-headless updated-headless
                                      :updated-at (DateTimeOffset/UtcNow))]
                 (task-repo/update-task connection-string updated-t)
                 (let [all-tasks (task-repo/get-all-tasks connection-string)

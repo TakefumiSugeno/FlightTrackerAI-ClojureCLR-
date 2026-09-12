@@ -6,17 +6,6 @@
             [clojure.string :as str])
   (:import [System Guid DateTimeOffset DateOnly]))
 
-(deftest test-render-task-modal-new
-  (testing "render-task-modal renders new registration modal with datalist and input fields"
-    (let [html (h/render-html (modals/render-task-modal nil {:origin "HND" :destination "CDG"}))]
-      (is (str/includes? html "新規フライト監視タスク登録"))
-      (is (str/includes? html "HND"))
-      (is (str/includes? html "CDG"))
-      (is (str/includes? html "/api/tasks"))
-      (is (str/includes? html "closeCurrentModal()"))
-      (is (str/includes? html "airportsList"))
-      (is (str/includes? html "btnRoundTrip"))
-      (is (str/includes? html "btnOneWay")))))
 
 (deftest test-render-task-modal-edit
   (testing "render-task-modal renders edit modal for existing task"
@@ -120,8 +109,28 @@
       (is (str/includes? html "/api/logs/modal"))
       (is (str/includes? html "ログをコピー (AI共有用)")))))
 
+(deftest test-render-task-modal-new
+  (testing "render-task-modal renders new registration modal with datalist and all 12 input fields"
+    (let [html (h/render-html (modals/render-task-modal nil {:origin "HND" :destination "CDG" :title "パリ旅行" :maxStops "DirectOnly"}))]
+      (is (str/includes? html "新規フライト監視タスク登録"))
+      (is (str/includes? html "HND"))
+      (is (str/includes? html "CDG"))
+      (is (str/includes? html "パリ旅行"))
+      (is (str/includes? html "/api/tasks"))
+      (is (str/includes? html "closeCurrentModal()"))
+      (is (str/includes? html "airportsList"))
+      (is (str/includes? html "btnRoundTrip"))
+      (is (str/includes? html "btnOneWay"))
+      (is (str/includes? html "name=\"maxStops\""))
+      (is (str/includes? html "name=\"checkIntervalHours\""))
+      (is (str/includes? html "name=\"targetPriceJpy\""))
+      (is (str/includes? html "name=\"title\""))
+      (is (str/includes? html "name=\"userNotes\""))
+      (is (str/includes? html "name=\"useDefaultWebhook\""))
+      (is (str/includes? html "name=\"showBrowser\"")))))
+
 (deftest test-render-standalone-new-task-page
-  (testing "render-standalone-new-task-page renders complete registration page"
+  (testing "render-standalone-new-task-page renders complete registration page with all 12 fields matching modal"
     (let [params {:origin "HND"
                   :destination "SIN"
                   :outboundDate "2026-08-10"
@@ -129,6 +138,7 @@
                   :tripType "RoundTrip"
                   :maxStops "DirectOnly"
                   :maxPriceJpy "90000"
+                  :title "シンガポール旅行"
                   :notes "お盆シンガポール"}
           html (h/render-html (modals/render-standalone-new-task-page params))]
       (is (str/includes? html "新規フライト監視タスク登録"))
@@ -137,5 +147,19 @@
       (is (str/includes? html "2026-08-10"))
       (is (str/includes? html "2026-08-17"))
       (is (str/includes? html "90000"))
+      (is (str/includes? html "シンガポール旅行"))
       (is (str/includes? html "お盆シンガポール"))
-      (is (str/includes? html "/api/tasks/standalone")))))
+      (is (str/includes? html "/api/tasks/standalone"))
+      ;; 全12項目の検証（手動モーダルと完全一致）
+      (is (str/includes? html "name=\"tripType\""))
+      (is (str/includes? html "name=\"origin\""))
+      (is (str/includes? html "name=\"destination\""))
+      (is (str/includes? html "name=\"outboundDate\""))
+      (is (str/includes? html "name=\"inboundDate\""))
+      (is (str/includes? html "name=\"maxStops\""))
+      (is (str/includes? html "name=\"checkIntervalHours\""))
+      (is (str/includes? html "name=\"targetPriceJpy\""))
+      (is (str/includes? html "name=\"title\""))
+      (is (str/includes? html "name=\"userNotes\""))
+      (is (str/includes? html "name=\"useDefaultWebhook\""))
+      (is (str/includes? html "name=\"showBrowser\"")))))

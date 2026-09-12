@@ -15,13 +15,17 @@
 
 (deftest test-parse-flight-query-json-success
   (testing "parse-flight-query-json extracts structured flight parameters"
-    (let [json-content "{\"Origin\":\"HND\",\"Destination\":\"CDG\",\"TripType\":\"RoundTrip\",\"OutboundDate\":\"2026-05-01\",\"InboundDate\":\"2026-05-08\",\"MaxPriceJpy\":160000,\"PreferredAirlines\":[\"ANA\"],\"Notes\":\"羽田発希望\"}"
+    (let [json-content "{\"Title\":\"GW羽田発パリ\",\"Origin\":\"HND\",\"Destination\":\"CDG\",\"TripType\":\"RoundTrip\",\"OutboundDate\":\"2026-05-01\",\"InboundDate\":\"2026-05-08\",\"MaxStops\":\"OneStop\",\"MaxPriceJpy\":160000,\"PreferredAirlines\":[\"ANA\"],\"Notes\":\"羽田発希望\"}"
           res (ai/parse-flight-query-json json-content)]
       (is (some? (:ok res)))
       (let [parsed (:ok res)]
+        (is (= "GW羽田発パリ" (:Title parsed)))
         (is (= "HND" (:Origin parsed)))
         (is (= "CDG" (:Destination parsed)))
         (is (= "RoundTrip" (:TripType parsed)))
         (is (= "2026-05-01" (:OutboundDate parsed)))
         (is (= "2026-05-08" (:InboundDate parsed)))
-        (is (= 160000 (:MaxPriceJpy parsed)))))))
+        (is (= "OneStop" (:MaxStops parsed)))
+        (is (= 160000 (:MaxPriceJpy parsed)))
+        (is (= "羽田発希望" (:Notes parsed)))))))
+

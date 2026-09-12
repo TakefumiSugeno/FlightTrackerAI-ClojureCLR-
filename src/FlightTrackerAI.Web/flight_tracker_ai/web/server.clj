@@ -6,6 +6,7 @@
             [flight-tracker-ai.web.views.dashboard :as dash]
             [flight-tracker-ai.web.views.modals :as modals]
             [flight-tracker-ai.infrastructure.database :as db]
+            [flight-tracker-ai.infrastructure.settings-repository :as settings-repo]
             [flight-tracker-ai.infrastructure.task-repository :as task-repo]
             [flight-tracker-ai.infrastructure.scraping-worker :as worker]
             [flight-tracker-ai.infrastructure.app-logger :as logger]
@@ -66,7 +67,9 @@
         (and (= method "GET") (.StartsWith raw-url "/tasks/new"))
         (let [uri (Uri. (str "http://localhost" raw-url))
               query (api/parse-query-string (.Query uri))
-              content (modals/render-standalone-new-task-page query)
+              settings (settings-repo/get-settings connection-string)
+              interval-str (str (:default-check-interval-hours settings))
+              content (modals/render-standalone-new-task-page query nil interval-str)
               full-html (layout/base-layout "新規タスク登録" content)]
           (write-response resp 200 "text/html; charset=utf-8" full-html))
 

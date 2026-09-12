@@ -47,7 +47,27 @@
     (let [conn-str (create-test-db)
           res (api/handle-api-request conn-str "GET" "/api/tasks/new-modal" nil)]
       (is (= 200 (:status res)))
-      (is (str/includes? (:body res) "新規フライト監視タスク登録")))))
+      (is (str/includes? (:body res) "新規フライト監視タスク登録"))))
+  (testing "GET /api/tasks/new-modal with prompt parses AI response and populates modal fields including title and maxStops"
+    (let [conn-str (create-test-db)]
+      (with-redefs [ai/parse-flight-query (fn [_ _ _ _]
+                                            {:ok {:Origin "HND"
+                                                  :Destination "CDG"
+                                                  :TripType "RoundTrip"
+                                                  :OutboundDate "2026-07-01"
+                                                  :InboundDate "2026-07-15"
+                                                  :MaxStops "OneStop"
+                                                  :MaxPriceJpy 140000
+                                                  :Title "HND ➔ CDG (AI)"
+                                                  :Notes "AI生成メモ"}})]
+        (let [res (api/handle-api-request conn-str "GET" "/api/tasks/new-modal?prompt=%E3%83%86%E3%82%B9%E3%83%88" nil)]
+          (is (= 200 (:status res)))
+          (is (str/includes? (:body res) "HND"))
+          (is (str/includes? (:body res) "CDG"))
+          (is (str/includes? (:body res) "HND ➔ CDG (AI)"))
+          (is (str/includes? (:body res) "AI生成メモ"))
+          (is (str/includes? (:body res) "140000"))
+          (is (str/includes? (:body res) "OneStop")))))))
 
 (deftest test-post-tasks-and-delete
   (testing "POST /api/tasks creates task and returns dashboard HTML with HX-Trigger, and DELETE removes it with HX-Trigger"
@@ -153,7 +173,23 @@
         (is (= 200 (:status res-err)))
         (is (nil? (get-in res-err [:headers "HX-Trigger"])))
         (is (str/includes? (:body res-err) "英字3文字である必要があります"))
-        (is (str/includes? (:body res-err) "BADORIGIN"))))))
+        (is (str/includes? (:body res-err) "BADORIGIN")))
+
+      ;; 3. Update with unchecked webhook (DISABLED) and showBrowser=true
+      (let [update-body2 "title=%E8%A8%AD%E5%AE%9A%E5%A4%89%E6%9B%B4&origin=HND&destination=CDG&showBrowser=true"
+            res2 (api/handle-api-request conn-str "POST" (str "/api/tasks/" task-id) update-body2)
+            updated2 (task-repo/get-task-by-id conn-str task-id)]
+        (is (= 200 (:status res2)))
+        (is (= "DISABLED" (:notification-webhook-url updated2)))
+        (is (= false (:is-headless updated2))))
+
+      ;; 4. Update with checked webhook (nil / system default)
+      (let [update-body3 "title=%E8%A8%AD%E5%AE%9A%E5%A4%89%E6%9B%B42&origin=HND&destination=CDG&useDefaultWebhook=true"
+            res3 (api/handle-api-request conn-str "POST" (str "/api/tasks/" task-id) update-body3)
+            updated3 (task-repo/get-task-by-id conn-str task-id)]
+        (is (= 200 (:status res3)))
+        (is (nil? (:notification-webhook-url updated3)))
+        (is (= true (:is-headless updated3)))))))
 
 (deftest test-task-history-and-detail
   (testing "GET /api/tasks/:id/history returns json and /detail returns modal html"
@@ -250,4 +286,54 @@
       (is (str/includes? (:body res-detail) "エイリアステスト"))
       (is (= 200 (:status res-view)))
       (is (str/includes? (:body res-view) "エイリアステスト")))))
+
+(deftest test-post-tasks-standalone-all-12-fields
+  (testing "POST /api/tasks/standalone binds all 12 fields correctly including webhook DISABLED and showBrowser"
+    ;; Case A: useDefaultWebhook is absent/false -> notification-webhook-url is "DISABLED", showBrowser is true -> is-headless is false
+    (let [conn-str (create-test-db)
+          form-body "title=%E5%85%A812%E9%A0%85%E7%9B%AE%E3%83%86%E3%82%B9%E3%83%88&origin=HND&destination=JFK&tripType=RoundTrip&outboundDate=2026-11-01&inboundDate=2026-11-10&maxStops=OneStop&checkIntervalHours=6&targetPriceJpy=180000&userNotes=%E6%A7%8B%E9%80%A0%E5%8C%96%E3%83%A1%E3%83%A2&showBrowser=true"
+          res (api/handle-api-request conn-str "POST" "/api/tasks/standalone" form-body)
+          tasks (task-repo/get-all-tasks conn-str)]
+      (is (= 200 (:status res)))
+      (is (str/includes? (:body res) "window.location.href='/'"))
+      (is (= 1 (count tasks)))
+      (let [t (first tasks)]
+        (is (= "全12項目テスト" (:title t)))
+        (is (= "HND" (:origin t)))
+        (is (= "JFK" (:destination t)))
+        (is (= :round-trip (:kind (:trip-type t))))
+        (is (= (DateOnly. 2026 11 1) (or (:outbound (:trip-type t)) (:outbound-date (:trip-type t)))))
+        (is (= (DateOnly. 2026 11 10) (or (:inbound (:trip-type t)) (:inbound-date (:trip-type t)))))
+        (is (= :one-stop (:max-stops t)))
+        (is (= 6 (:check-interval-hours t)))
+        (is (= 180000 (:target-price-jpy t)))
+        (is (= "DISABLED" (:notification-webhook-url t)))
+        (is (= "構造化メモ" (:user-notes t)))
+        (is (= false (:is-headless t)))))
+
+    ;; Case B: useDefaultWebhook is on/true -> notification-webhook-url is nil (uses system default), showBrowser is false/absent -> is-headless is true
+    (let [conn-str (create-test-db)
+          form-body "title=&origin=NRT&destination=LAX&tripType=OneWay&outboundDate=2026-12-01&maxStops=DirectOnly&checkIntervalHours=24&targetPriceJpy=95000&userNotes=&useDefaultWebhook=true"
+          res (api/handle-api-request conn-str "POST" "/api/tasks/standalone" form-body)
+          tasks (task-repo/get-all-tasks conn-str)]
+      (is (= 200 (:status res)))
+      (let [t (first (filter #(= (:destination %) "LAX") tasks))]
+        (is (= "NRT ➔ LAX" (:title t)))
+        (is (= :direct-only (:max-stops t)))
+        (is (= 24 (:check-interval-hours t)))
+        (is (nil? (:notification-webhook-url t)))
+        (is (= true (:is-headless t)))))))
+
+(deftest test-post-tasks-standalone-validation-error-re-renders-page
+  (testing "POST /api/tasks/standalone with invalid IATA code returns 400 and full standalone page with error and preserved input"
+    (let [conn-str (create-test-db)
+          form-body "title=%E3%82%B9%E3%82%BF%E3%83%B3%E3%83%89%E3%82%A2%E3%83%AD%E3%83%BC%E3%83%B3%E3%82%A8%E3%83%A9%E3%83%BC&origin=BADORIGIN&destination=CDG&tripType=OneWay&outboundDate=2026-06-01"
+          res (api/handle-api-request conn-str "POST" "/api/tasks/standalone" form-body)]
+      (is (= 400 (:status res)))
+      (is (str/includes? (:body res) "<!DOCTYPE html>"))
+      (is (str/includes? (:body res) "新規タスク登録"))
+      (is (str/includes? (:body res) "英字3文字である必要があります"))
+      (is (str/includes? (:body res) "BADORIGIN"))
+      (is (str/includes? (:body res) "スタンドアローンエラー")))))
+
 

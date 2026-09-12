@@ -45,10 +45,13 @@
 
 (defn dispatch-price-notification
   [^HttpClient http-client task-item lowest-offer price-change-percent is-target-met global-webhook]
-  (let [target-webhook (or (:notification-webhook-url task-item) global-webhook)]
-    (if (or (nil? target-webhook) (str/blank? target-webhook))
+  (let [task-webhook (:notification-webhook-url task-item)]
+    (if (= task-webhook "DISABLED")
       {:ok nil}
-      (let [is-slack (.Contains ^String target-webhook "hooks.slack.com")
+      (let [target-webhook (or task-webhook global-webhook)]
+        (if (or (nil? target-webhook) (str/blank? target-webhook))
+          {:ok nil}
+          (let [is-slack (.Contains ^String target-webhook "hooks.slack.com")
             price-str (str "¥" (.ToString (long (or (:price-jpy lowest-offer) 0)) "N0"))
             origin-str (domain/iata-code-value (:origin task-item))
             dest-str (domain/iata-code-value (:destination task-item))
@@ -74,5 +77,5 @@
                         {:name "価格変動" :value (str price-change-percent "%") :inline true}
                         {:name "航空会社" :value airlines-str :inline true}
                         {:name "提供元" :value provider-str :inline true}]]
-            (send-discord-webhook http-client target-webhook title desc color fields booking-url)))))))
+            (send-discord-webhook http-client target-webhook title desc color fields booking-url)))))))))
 

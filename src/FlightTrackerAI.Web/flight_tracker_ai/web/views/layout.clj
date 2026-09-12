@@ -184,15 +184,19 @@
             const maxStops = data.maxStops || data.MaxStops || 'Any';
             const maxPrice = data.maxPriceJpy || data.MaxPriceJpy || '';
             const notes = data.notes || data.Notes || '';
+            const title = data.title || data.Title || (origin && destination ? `${origin} ➔ ${destination}` : '');
 
             const params = new URLSearchParams();
+            if (title) params.append('title', title);
             if (origin) params.append('origin', origin);
             if (destination) params.append('destination', destination);
             if (outboundDate) params.append('outboundDate', outboundDate);
             if (inboundDate) params.append('inboundDate', inboundDate);
             if (tripType) params.append('tripType', tripType);
             if (maxStops) params.append('maxStops', maxStops);
+            if (maxPrice) params.append('targetPriceJpy', maxPrice);
             if (maxPrice) params.append('maxPriceJpy', maxPrice);
+            if (notes) params.append('userNotes', notes);
             if (notes) params.append('notes', notes);
 
             const newTabUrl = '/tasks/new?' + params.toString();

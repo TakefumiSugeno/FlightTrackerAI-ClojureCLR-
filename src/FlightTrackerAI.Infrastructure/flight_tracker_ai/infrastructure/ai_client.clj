@@ -43,8 +43,10 @@
           inbound (or (get-val "InboundDate") (get-val "inboundDate") (get-val "inbound_date"))
           max-stops (or (get-val "MaxStops") (get-val "maxStops") "Any")
           max-price (get-num "MaxPriceJpy")
+          title (or (get-val "Title") (get-val "title"))
           notes (or (get-val "Notes") (get-val "notes"))]
-      {:ok {:Origin origin
+      {:ok {:Title title
+            :Origin origin
             :Destination dest
             :TripType trip-type
             :OutboundDate outbound
@@ -80,7 +82,7 @@
                               "ユーザーが入力した自然言語文、箇条書き、またはYAML風テキストを厳密に解析し、必ず指定の純粋な JSON フォーマットのみで回答してください。\n"
                               "【基準日情報】\n- 本日: " today-str "\n"
                               "【出力JSONフォーマット】\n"
-                              "{\"Origin\":\"HND\",\"Destination\":\"CDG\",\"TripType\":\"RoundTrip\",\"OutboundDate\":\"2026-05-01\",\"InboundDate\":\"2026-05-08\",\"MaxStops\":\"OneStop\",\"MaxPriceJpy\":150000,\"PreferredAirlines\":[\"ANA\"],\"Notes\":\"羽田発希望\"}")
+                              "{\"Title\":\"HND ➔ CDG 休暇旅行\",\"Origin\":\"HND\",\"Destination\":\"CDG\",\"TripType\":\"RoundTrip\",\"OutboundDate\":\"2026-05-01\",\"InboundDate\":\"2026-05-08\",\"MaxStops\":\"OneStop\",\"MaxPriceJpy\":150000,\"PreferredAirlines\":[\"ANA\"],\"Notes\":\"羽田発希望\"}")
             payload {:model model
                      :messages [{:role "system" :content system-prompt}
                                 {:role "user" :content prompt-text}]
