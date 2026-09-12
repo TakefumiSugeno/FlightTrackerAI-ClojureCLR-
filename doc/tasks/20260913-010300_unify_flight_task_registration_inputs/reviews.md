@@ -35,10 +35,33 @@
 
 ## 3. レビュー指摘への対応方針（タスク計画への反映）
 
-上記指摘をすべて受け入れ、`tasks.md` を以下の通り改訂する：
+上記指摘をすべて受け入れ、`tasks.md` を以下の通り改訂した：
 
 1. **フォーム共通部品化**: `modals.clj` に `render-task-form-fields` を新設し、手動モーダルとスタンドアロン画面で同一のフォームロジックを共有する（コピペ根絶）。
 2. **Webhook通知無効化制御**: チェックOFF時に `"DISABLED"` を記録し、`notification.clj` で確実に通知をスキップする。
 3. **AIパラメータの完全連携**: `ai-client.clj`, `layout.clj`, `api_controller.clj` で `title`, `maxStops`, `notes` を漏れなく受け渡す。
 4. **スタンドアロン画面のエラーリカバリ**: バリデーションエラー時に入力値を保持して再描画する。
 5. **全体設定連動と日付最小値ガード**: 巡回間隔の動的反映と本日以降日付の選択ガードを導入。
+
+---
+
+## 4. 【Step 2: 仕様・設計・UIモック】のサブエージェントレビュー結果
+
+- **レビュー日時**: 2026-09-13 01:08
+- **レビュアー**: サブエージェント（Design & Mock Reviewer）
+- **総合判定**: **【条件付き合意推奨 (LGTM with Minor Recommendations)】**
+
+### 主な評価と対応結果
+
+1. **全12項目の完全網羅**:
+   - 手動登録モーダル (`index.html`) およびスタンドアロン画面 (`standalone_new_task.html`) の双方が全12項目を網羅していることを確認。
+2. **モック微調整指摘への対応**:
+   - `index.html` 側の `<option value="1">` を `value="OneStop"` に統一。
+   - `index.html` の日付選択にも `min="2026-09-13"` を追加し、過去日ガードを完全統一。
+3. **ドキュメント側の完全性担保**:
+   - `design_detail.md` の 5.2 節（DDL）に `is_headless INTEGER NOT NULL DEFAULT 1` を追記。
+   - `design_detail.md` 第4章の対応表に `showBrowser` / `is_headless` の対応行を追記。
+   - `spec.md` 3.1 節に `ShowBrowser` と `UseDefaultWebhook` の仕様を追記。
+4. **実装時の注意事項確認**:
+   - `render-task-form-fields` は `<form>` タグを含まない純粋関数として切り出すこと。
+   - タスク編集時（`is-edit` モード）において `webhook_url` が `"DISABLED"` の場合にチェックボックスを OFF で初期表示する逆変換処理を組み込むこと。

@@ -286,8 +286,16 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
 6. **全体設定モーダル (`#settingsModal`)**:
    - 巡回ワーカー間隔（時間）、グローバル Discord Webhook URL、OpenRouter API Key、モデル名の更新。
 
-7. **スタンドアロン新規登録画面 (`/tasks/new`)**:
-   - AI 解析からの画面遷移先としても機能する独立ページ。主要空港のサジェスト、日付ピッカー、目標価格、優先航空会社入力に対応。
+7. **スタンドアロン新規登録画面 (`/tasks/new`) & 手動登録モーダルの共通設計**:
+   - **共通フォーム部品化 (`render-task-form-fields`)**:
+     - 手動登録モーダル (`render-task-modal`) とスタンドアロン画面 (`render-standalone-new-task-page`) の双方で、全12項目の入力フィールドを共通コンポーネント関数 `render-task-form-fields` から生成。
+     - 入力12項目: 旅行タイプ (`tripType`)、出発地 (`origin`)、目的地 (`destination`)、往路出発日 (`outboundDate`、本日以降 `min` ガード)、復路出発日 (`inboundDate`、本日以降 `min` ガード)、許容乗継回数 (`maxStops`)、巡回間隔 (`checkIntervalHours`、システム設定連動)、目標アラート価格 (`targetPriceJpy`)、タスク名 (`title`、未入力時は自動補完)、構造化メモ (`userNotes`)、Webhook通知 (`useDefaultWebhook`)、有頭ブラウザ巡回 (`showBrowser`)。
+   - **Webhook通知の無効化制御 (`notification.clj` 連携)**:
+     - ユーザーが `useDefaultWebhook` のチェックを外した場合、タスクの `:notification-webhook-url` に `"DISABLED"` を格納。
+     - `notification.clj` の巡回通知ワーカーは、`(= (:notification-webhook-url task) "DISABLED")` の場合、グローバル Webhook へのフォールバックを停止し、通知を完全にスキップ。
+   - **コントローラ入力処理の一元化 (`parse-task-form`)**:
+     - `api_controller.clj` において、`POST /api/tasks` と `POST /api/tasks/standalone` の入力抽出・正規化・バリデーション・TaskItem 生成ロジックを `parse-task-form` 関数に一元化。
+     - スタンドアロン登録でエラーが発生した場合は、白画面にせず入力値を引き渡して `render-standalone-new-task-page` をエラーメッセージ付きで再レンダリング。
 
 ## 3. ドメイン設計 (Domain Models in ClojureCLR)
 
@@ -330,8 +338,11 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
 |                            | 許容乗継回数                       | `:max-stops`                          | `tasks.max_stops` (TEXT)                       |    OK    |
 |                            | 目標アラート価格 (JPY)             | `:target-price-jpy`                   | `tasks.target_price_jpy` (INTEGER)             |    OK    |
 |                            | 巡回間隔                           | `:check-interval-hours`               | `tasks.check_interval_hours` (INTEGER)         |    OK    |
+|                            | タスク名                           | `:title`                              | `tasks.title` (TEXT)                           |    OK    |
 |                            | 優先航空会社                       | `:preferred-airlines`                 | `tasks.preferred_airlines` (TEXT/JSON)         |    OK    |
 |                            | **ユーザーメモ / 要望**            | `:user-notes`                         | `tasks.user_notes` (TEXT)                      |    OK    |
+|                            | Webhook通知設定                    | `:notification-webhook-url`           | `tasks.webhook_url` (TEXT ※OFF時 'DISABLED')   |    OK    |
+|                            | 有頭ブラウザ巡回 (手動支援)        | `:is-headless`                        | `tasks.is_headless` (INTEGER 0:有頭, 1:無頭)   |    OK    |
 | **クイックメモ編集**       | メモ直接更新 (UC-09)               | `:user-notes`                         | `tasks.user_notes` (TEXT)                      |    OK    |
 | **タスクカード / 一覧**    | 区間・空港通称名                   | `:origin / :destination` + 空港名     | `tasks.origin / destination`                   |    OK    |
 |                            | 日程・発着時刻                     | `:trip-type` + 発着時刻               | `tasks.outbound_date / inbound_date`           |    OK    |
@@ -390,6 +401,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     check_interval_hours INTEGER NOT NULL DEFAULT 12,
     webhook_url TEXT,
     user_notes TEXT,
+    is_headless INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'Active',
     error_message TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0,

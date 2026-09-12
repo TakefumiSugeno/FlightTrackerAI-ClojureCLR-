@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ja" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>新規フライト監視タスク登録 - FlightTrackerAI (UIモック)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              slate: {
+                850: "#151e2e",
+                950: "#0b0f19",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased py-8 px-4">
+    <div class="max-w-2xl mx-auto">
+      <div class="bg-slate-950 rounded-2xl shadow-2xl border border-slate-800 p-6 md:p-8 space-y-6">
+        <!-- ヘッダー -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="w-10 h-10 rounded-xl bg-sky-600/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
+              <i class="fa-solid fa-plane-departure text-lg"></i>
+            </span>
+            <div>
+              <h2 class="text-lg font-bold text-white">新規フライト監視タスク登録</h2>
+              <p class="text-xs text-slate-400">AI解析によって抽出された条件をご確認・調整の上、登録してください。</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="if (window.opener) { window.close(); } else { window.location.href='/'; }"
+            class="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 transition flex items-center gap-1.5"
+          >
+            <i class="fa-solid fa-arrow-left text-[10px]"></i>
+            ダッシュボードへ戻る
+          </button>
+        </div>
+
+        <!-- 登録フォーム (手動登録モーダルと全12項目完全一致) -->
+        <form id="standaloneForm" class="space-y-5 text-xs" onsubmit="handleSubmit(event)">
+          <!-- 1. 旅行タイプ切り替え -->
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">旅行タイプ *</label>
+            <div class="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-800">
+              <button
+                type="button"
+                id="btnRoundTrip"
+                onclick="setTripType('RoundTrip')"
+                class="py-2 text-center rounded-md font-medium bg-sky-600 text-white transition"
+              >
+                往復
+              </button>
+              <button
+                type="button"
+                id="btnOneWay"
+                onclick="setTripType('OneWay')"
+                class="py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition"
+              >
+                片道
+              </button>
+            </div>
+            <input type="hidden" id="formTripType" name="tripType" value="RoundTrip" />
+          </div>
+
+          <!-- 2 & 3. 空港選択 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">出発地 (都市名またはIATA) *</label>
+              <input
+                list="airportsList"
+                type="text"
+                name="origin"
+                id="formOrigin"
+                required
+                value="HND - 東京(羽田)"
+                placeholder="HND - 東京(羽田)"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">目的地 (都市名またはIATA) *</label>
+              <input
+                list="airportsList"
+                type="text"
+                name="destination"
+                id="formDestination"
+                required
+                value="CDG - パリ(シャルル・ド・ゴール)"
+                placeholder="CDG - パリ(シャルル・ド・ゴール)"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <datalist id="airportsList">
+            <option value="HND - 東京(羽田)"></option>
+            <option value="NRT - 東京(成田)"></option>
+            <option value="KIX - 大阪(関西)"></option>
+            <option value="ITM - 大阪(伊丹)"></option>
+            <option value="FUK - 福岡"></option>
+            <option value="CTS - 札幌(新千歳)"></option>
+            <option value="CDG - パリ(シャルル・ド・ゴール)"></option>
+            <option value="LHR - ロンドン(ヒースロー)"></option>
+            <option value="LAX - ロサンゼルス"></option>
+            <option value="SFO - サンフランシスコ"></option>
+            <option value="HNL - ホノルル"></option>
+            <option value="BKK - バンコク(スワンナプーム)"></option>
+            <option value="SIN - シンガポール(チャンギ)"></option>
+            <option value="TPE - 台北(桃園)"></option>
+          </datalist>
+
+          <!-- 4 & 5. 日程入力 (min属性付き) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1 flex items-center gap-1.5">
+                <i class="fa-regular fa-calendar text-sky-400 text-xs"></i>
+                往路出発日 *
+              </label>
+              <input
+                type="date"
+                name="outboundDate"
+                id="formOutboundDate"
+                required
+                value="2026-10-15"
+                min="2026-09-13"
+                class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+            <div id="inboundDateContainer">
+              <label class="block text-slate-400 font-medium mb-1 flex items-center gap-1.5">
+                <i class="fa-regular fa-calendar text-indigo-400 text-xs"></i>
+                復路出発日
+              </label>
+              <input
+                type="date"
+                name="inboundDate"
+                id="formInboundDate"
+                value="2026-10-22"
+                min="2026-09-13"
+                class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg px-3.5 py-2.5 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- 6 & 7. 乗継 & 巡回間隔 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">許容乗継回数 (Max Stops)</label>
+              <select
+                name="maxStops"
+                id="formMaxStops"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              >
+                <option value="Any">乗継制限なし (最安重視・推奨)</option>
+                <option value="OneStop" selected>1回乗継まで</option>
+                <option value="DirectOnly">直行便のみ (0回乗継)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">巡回間隔</label>
+              <select
+                name="checkIntervalHours"
+                id="formInterval"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              >
+                <option value="12" selected>全体設定に従う (現在 12h)</option>
+                <option value="3">3時間ごと</option>
+                <option value="6">6時間ごと</option>
+                <option value="12">12時間ごと</option>
+                <option value="24">24時間ごと</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 8 & 9. 目標価格 & タスク名 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">目標アラート価格 (JPY)</label>
+              <input
+                type="number"
+                name="targetPriceJpy"
+                id="formTargetPrice"
+                value="160000"
+                placeholder="例: 160000"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">タスク名 (任意)</label>
+              <input
+                type="text"
+                name="title"
+                id="formTitle"
+                value="ゴールデンウィーク パリ旅行"
+                placeholder="例: ゴールデンウィーク パリ旅行"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- 10. メモ -->
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">構造化メモ / 要望・制約（任意）</label>
+            <textarea
+              name="userNotes"
+              id="formNotes"
+              rows="3"
+              placeholder="例: - 荷物制限なし希望&#10;- ホテル最寄り空港優先"
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-white font-mono text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none resize-y"
+            >- 荷物制限なし希望
+- エールフランス優先</textarea>
+          </div>
+
+          <!-- 11 & 12. Webhook & 有頭ブラウザ巡回設定 -->
+          <div class="p-4 bg-slate-900 rounded-xl border border-slate-800 space-y-3">
+            <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                name="useDefaultWebhook"
+                id="useDefaultWebhook"
+                value="true"
+                checked
+                class="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"
+              />
+              <span>デフォルトの Discord / Slack Webhook に通知する</span>
+            </label>
+            <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                name="showBrowser"
+                id="showBrowser"
+                value="true"
+                class="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"
+              />
+              <span class="text-sky-300 font-medium">定期巡回時もブラウザ画面を表示する (手動支援モード)</span>
+            </label>
+          </div>
+
+          <!-- アクションボタン -->
+          <div class="pt-4 border-t border-slate-800 flex items-center justify-end space-x-3">
+            <button
+              type="button"
+              onclick="if (window.opener) { window.close(); } else { window.location.href='/'; }"
+              class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition text-center"
+            >
+              キャンセル
+            </button>
+            <button
+              type="submit"
+              class="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-semibold shadow-md transition flex items-center gap-2"
+            >
+              <i class="fa-solid fa-plane-departure"></i>
+              登録して巡回開始
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      function setTripType(type) {
+        const isRound = type === "RoundTrip";
+        document.getElementById("formTripType").value = type;
+        document.getElementById("btnRoundTrip").className = isRound
+          ? "py-2 text-center rounded-md font-medium bg-sky-600 text-white transition"
+          : "py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition";
+        document.getElementById("btnOneWay").className = !isRound
+          ? "py-2 text-center rounded-md font-medium bg-sky-600 text-white transition"
+          : "py-2 text-center rounded-md font-medium text-slate-400 hover:text-white transition";
+        document.getElementById("inboundDateContainer").style.display = isRound ? "block" : "none";
+      }
+
+      function handleSubmit(e) {
+        e.preventDefault();
+        alert("新規タスクを登録しました！初回の巡回を開始します。");
+        if (window.opener) {
+          window.close();
+        } else {
+          window.location.href = "/";
+        }
+      }
+    </script>
+  </body>
+</html>

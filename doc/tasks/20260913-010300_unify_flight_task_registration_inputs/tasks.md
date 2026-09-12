@@ -64,9 +64,11 @@
 ## 3. 実装タスク計画
 
 ### Phase 1: 仕様・設計・UIモックの更新と合意
-- [ ] `doc/mock/index.html` の更新:
+- [x] `doc/mock/index.html` の更新:
   - 手動登録モーダル (`newTaskModal`) の入力項目を全12項目に整備・確認。
-- [ ] `doc/spec.md`, `doc/design_detail.md` の更新:
+- [x] `doc/mock/standalone_new_task.html` の新規作成:
+  - 手動登録モーダルと全12項目完全一致のスタンドアロン画面モックを作成。
+- [x] `doc/spec.md`, `doc/design_detail.md` の更新:
   - 手動登録・AI解析登録・スタンドアロン画面における入力12項目の統一仕様を明記。
   - フォーム共通部品化（`render-task-form-fields`）のコンポーネント設計を記載。
   - `useDefaultWebhook` OFF 時の通知スキップ仕様（`"DISABLED"` 格納）を明記。

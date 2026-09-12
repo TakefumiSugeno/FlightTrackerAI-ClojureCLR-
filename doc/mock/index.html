@@ -2318,6 +2318,7 @@
                 type="date"
                 id="formOutboundDate"
                 value="2026-05-01"
+                min="2026-09-13"
                 required
                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white"
               />
@@ -2330,6 +2331,7 @@
                 type="date"
                 id="formInboundDate"
                 value="2026-05-08"
+                min="2026-09-13"
                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white"
               />
             </div>
@@ -2345,7 +2347,7 @@
                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white"
               >
                 <option value="Any">乗継制限なし (最安重視・推奨)</option>
-                <option value="1" selected>1回乗継まで</option>
+                <option value="OneStop" selected>1回乗継まで</option>
                 <option value="DirectOnly">直行便のみ (0回乗継)</option>
               </select>
             </div>
@@ -2381,12 +2383,12 @@
             </div>
             <div>
               <label class="block text-slate-400 font-medium mb-1"
-                >優先航空会社 (任意)</label
+                >タスク名 (任意)</label
               >
               <input
                 type="text"
-                id="formAirlines"
-                placeholder="例: ANA, JAL, エールフランス"
+                id="formTitle"
+                placeholder="例: ゴールデンウィーク パリ旅行"
                 class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white"
               />
             </div>
@@ -2404,15 +2406,23 @@
             ></textarea>
           </div>
 
-          <div class="space-y-1.5">
-            <label class="flex items-center space-x-2 text-slate-300">
+          <div class="p-3 bg-slate-900 rounded-lg border border-slate-800 space-y-2">
+            <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
               <input
                 type="checkbox"
                 id="useDefaultWebhook"
                 checked
-                class="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-900"
+                class="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"
               />
-              <span>デフォルトの Discord Webhook に通知する</span>
+              <span>デフォルトの Discord / Slack Webhook に通知する</span>
+            </label>
+            <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                id="showBrowser"
+                class="rounded border-slate-700 text-sky-600 focus:ring-sky-500 bg-slate-950"
+              />
+              <span class="text-sky-300 font-medium">定期巡回時もブラウザを表示する (手動支援モード)</span>
             </label>
           </div>
 
