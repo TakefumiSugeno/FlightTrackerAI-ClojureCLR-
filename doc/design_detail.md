@@ -456,27 +456,131 @@ CREATE INDEX IF NOT EXISTS idx_run_logs_task ON task_run_logs(task_id);
 
 ## 6. スクレイピングアーキテクチャ & Interop 設計
 
-```clojure
-(ns flight-tracker-ai.infrastructure.scraper-common
-  (:import [System.Threading.Tasks Task]
-           [System.Threading SemaphoreSlim]))
+Playwright による実ブラウザ自動操作は、元リポジトリ（F#版）の堅牢な仕様を 100% ClojureCLR に移植し、Clojure の特性（`loop/recur`、atom 状態管理、純粋関数分離）を生かして設計します。
 
-;; Task<T> または ValueTask<T> の安全な解決 (デッドロック防止)
-(defn await-task [^Task task]
-  (.GetResult (.GetAwaiter (.ConfigureAwait task false))))
+### 6.1 スクレイピング共通基盤 (`scraper_common.clj`)
 
-;; 巡回実行の排他制御 (SemaphoreSlim 1, 1)
-(defonce scraper-lock (SemaphoreSlim. 1 1))
+1. **非同期タスク同期 (`await-task`)**:
+   ```clojure
+   (defn await-task [^Task task]
+     (when task
+       (.GetResult (.GetAwaiter (.ConfigureAwait task false)))))
+   ```
+2. **多重起動・排他ロック (`scraper-lock`)**:
+   - `SemaphoreSlim(1, 1)` によるプロセス内スレッド排他制御。
+   - `with-scraper-lock` マクロによる確実な解放。
+3. **Chromium 自動プロビジョニング (`ensure-playwright-browsers-installed!`)**:
+   - `(defonce ^:private browser-installed-state (atom :uninstalled))`
+   - 初回呼び出し時に `Microsoft.Playwright.Program/Main` を引数 `(into-array String ["install" "chromium"])` で実行。
+   - 状態を `:installing` ➔ `:installed` (または `:failed`) へ遷移させ、失敗時はクールダウン時間を設けて連続失敗・無駄なネットワーク試行を防止。
+4. **ブラウザ永続コンテキスト生成 (`create-context-async`)**:
+   - 保存先: `doc/work/browser_profile/`
+   - **SingletonLock クリーンアップ**:
+     - 起動直前に、古い `SingletonLock`、`SingletonCookie`、`SingletonSocket` の存在を検証。
+     - ロック中の Chromium プロセスが存在しないことを確認した上で、安全にファイルを削除し、クラッシュ後の再起動不能（デッドロック）を完全に防止。
+   - オプション構築:
+     - `BrowserTypeLaunchPersistentContextOptions`
+     - ヘッドレス設定: `options.Headless = Nullable headless`
+     - 引数: `--disable-blink-features=AutomationControlled`, `--disable-infobars`, `--no-sandbox`, `--window-size=1440,900`
+     - 有頭時追加: `options.SlowMo = Nullable 150.0`, 引数 `--start-maximized`, `options.ViewportSize = null`
+     - ロケール: `ja-JP`, タイムゾーン: `Asia/Tokyo`, `BypassCSP = true`, `IgnoreHTTPSErrors = true`
+     - UserAgent & Sec-Ch-Ua ヘッダー
+   - **Stealth スクリプト注入 (`AddInitScriptAsync`)**:
+     ```javascript
+     Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+     window.chrome = { runtime: {} };
+     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+     Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja', 'en-US', 'en'] });
+     const originalQuery = window.navigator.permissions.query;
+     window.navigator.permissions.query = (parameters) => (
+         parameters.name === 'notifications' ?
+             Promise.resolve({ state: Notification.permission }) :
+             originalQuery(parameters)
+     );
+     ```
+5. **安全なクローズ (`close-context-async`)**:
+   - `context.Pages` の全ページクローズ ➔ `context.CloseAsync` ➔ `context.Browser.CloseAsync` を個別 `try-catch` で安全に実行。
+   - `AppDomain.CurrentDomain.ProcessExit` イベントハンドラへの登録によるプロセス終了時の確実な解放。
 
-;; 排他制御マクロ
-(defmacro with-scraper-lock [& body]
-  `(do
-     (await-task (.WaitAsync scraper-lock))
+### 6.2 Google Flights スクレーパー (`google_flights_scraper.clj`)
+
+1. **検索URL生成 (`build-search-url`)**:
+   - 片道: `https://www.google.com/travel/flights?q=Flights%20to%20[DEST]%20from%20[ORIG]%20on%20[DATE]&hl=ja&curr=JPY`
+   - 往復: `https://www.google.com/travel/flights?q=Flights%20to%20[DEST]%20from%20[ORIG]%20on%20[OB]%20through%20[IB]&hl=ja&curr=JPY`
+2. **ブラウザ自動巡回 (`scrape-async`)**:
+   - `page.GotoAsync(url, PageGotoOptions(WaitUntil = DOMContentLoaded, Timeout = 30000))`
+   - Cookie同意スキップ: `button[aria-label*='同意'], button[aria-label*='Accept']` を検知・クリック。
+   - **検索結果カード待機ポーリング (`loop/recur`)**:
+     - セレクタ: `li.pIav2d, div[role='listitem'].pIav2d, div.yR1fYc, [class*='pIav2d']`
+     - 500ms 間隔で最大 10 回ポーリング。再帰ではなく `loop/recur` によりスタック消費ゼロを保証。
+   - **画面キャプチャ保存**:
+     - `doc/work/screenshots/yyyyMMdd-HHmmss_GoogleFlights_[taskId].png` に保存。
+   - **カードDOM要素テキスト抽出**:
+     - 価格: `.YMlIz.FpEdX span, span[aria-label*='円'], span[aria-label*='JPY'], [class*='YMlIz']`
+     - 航空会社: `.sSHqwe.tPgKwe.ogfYpf span, .Ir0Voe .sSHqwe, [class*='sSHqwe']`
+     - 発着時刻: `.dpKdp span, .mv1WYe span, [class*='dpKdp']`
+     - 所要時間: `.AdWm1c.gvkrdb, .Ak5kof, [class*='gvkrdb']`
+     - 乗継数: `.EfT7Ae .VG3hNb, .EfT7Ae span, [class*='VG3hNb']`
+   - `parse-offer-element` による `FlightOffer` マップ変換とリスト返却。
+
+### 6.3 Skyscanner スクレーパー (`skyscanner_scraper.clj`)
+
+1. **検索URL生成 (`build-search-url`)**:
+   - 片道: `https://www.skyscanner.jp/transport/flights/[orig]/[dest]/[yyMMdd]/?adultsv2=1&cabinclass=economy&currency=JPY`
+   - 往復: `https://www.skyscanner.jp/transport/flights/[orig]/[dest]/[yyMMdd]/[yyMMdd]/?adultsv2=1&cabinclass=economy&currency=JPY`
+2. **Bot検知純粋関数 (`detect-bot-challenge`)**:
+   - 引数: `[title body-text px-element-found?]`
+   - 判定: `px-element-found?` または `title` に `"robot"` / `"person or a robot"`、または `body-text` に `"PRESS & HOLD"` が含まれる場合に `true` を返却。
+   - 単体テストで境界値を完全網羅（テスト容易性の確保）。
+3. **ブラウザ自動巡回 (`scrape-async`)**:
+   - **ステップ 1: トップページ事前ウォームアップ**:
+     - `https://www.skyscanner.jp/` へのアクセス（`DOMContentLoaded`, 20秒）。
+     - 自然なマウス移動エミュレーション（`Mouse.MoveAsync(150, 250)` ➔ `Mouse.MoveAsync(350, 450)`）。
+     - Cookie同意ボタン受諾（`#accept-cookie-button` 等）。
+   - **ステップ 2: Referer 付き検索遷移**:
+     - Referer: `https://www.skyscanner.jp/`
+     - `page.GotoAsync(url, PageGotoOptions(Referer = ..., Timeout = 60000))`
+   - **ステップ 3: カード待機ポーリング & Bot自動解除 (`loop/recur`)**:
+     - セレクタ: `div[data-testid='flight-card'], [data-testid='itinerary-card'], div[class*='FlightCard_']`
+     - 各イテレーションでカード存在確認。カード未出現時は `detect-bot-challenge` で検証。
+     - **Bot 検知時 (PRESS & HOLD)**:
+       - 画面キャプチャ保存 (`yyyyMMdd-HHmmss_Skyscanner_BotChallenge_[taskId].png`)。
+       - 自然なマウス軌跡移動（複数ステップで中心座標へ移動）。
+       - 長押し試行: `MouseDownAsync` ➔ 5.5秒待機 ➔ `MouseUpAsync`。
+       - 有頭ブラウザモード時はユーザー手動解除ガイダンスを出力し、最大 60 回（60秒）待機。
+       - ワーカー停止フラグを評価し、待機中であっても即時中断可能。
+   - **ステップ 4: 画面キャプチャ保存 & カードDOM抽出**:
+     - キャプチャ保存 (`yyyyMMdd-HHmmss_Skyscanner_[taskId].png`)。
+     - 価格、航空会社（`img[alt]` フォールバック対応）、所要時間、乗継数、時刻を抽出して `FlightOffer` リストを返却。
+
+### 6.4 巡回ワーカー結合 (`scraping_worker.clj`)
+
+1. **実効ヘッドレス判定**:
+   ```clojure
+   (let [effective-headless (and (:is-headless task-item) (:headless-mode settings))]
+     ...)
+   ```
+2. **Playwright ライフサイクルと安全な巡回パイプライン**:
+   - `Playwright/CreateAsync` によるオンデマンドインスタンス確保。
+   - `scraper-common/with-scraper-lock` による多重起動排他制御。
+   - `scraper-common/create-context-async` による実ブラウザ起動。
+   - `context.NewPageAsync()` によるページ生成。
+   - Google Flights / Skyscanner の巡回実行、結果保存（`flight_snapshots`, `task_run_logs`）、最安値判定、Webhook 通知。
+   - `finally` 節における確実なリソース破棄:
+     ```clojure
      (try
-       ~@body
-       (finally
-         (.Release scraper-lock)))))
-```
+       (scraper-common/await-task (.CloseAsync page))
+       (catch Exception _ nil))
+     (scraper-common/close-context-async context)
+     (.Dispose playwright)
+     ```
+
+### 6.5 テスト容易性とアーキテクチャ分離規約
+
+- **決定論的単体テストの維持**:
+  - パース関数（`parse-price-jpy`, `parse-duration-minutes`, `parse-offer-element`）および Bot検知判定（`detect-bot-challenge`）は純粋関数として単体テストで 100% 検証。
+  - 実ブラウザを使用するテストは単体テスト（`./scripts/test.ps1`）では実行せず、環境変数 `FLIGHT_TRACKER_RUN_E2E=1` の場合のみ実行される統合テストとして分離。
+  - これにより、オフライン・CI環境での高速・決定論的なテスト通過（カバレッジ 80% 以上）を担保。
 
 ---
 

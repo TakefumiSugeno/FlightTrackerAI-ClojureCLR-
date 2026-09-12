@@ -90,15 +90,40 @@ flowchart TD
 ### 3.4 自動巡回・スクレイピング機能 (Scraping Engine)
 
 - **対象**: Google Flights & Skyscanner
-- **複数便・複数セグメントの取得**:
-  - 最安上位複数便（5〜10件）の便情報と、各便のフライトセグメント（全区間の航空会社・便名・時間）をパースして保存。
+- **Playwright ブラウザバイナリ自動プロビジョニング**:
+  - 初回起動時または実行時に Chromium バイナリの存在を確認し、未導入時は `Microsoft.Playwright.Program.Main(["install", "chromium"])` により自動プロビジョニング。
+  - 多重実行防止およびネットワーク障害時の不要な再試行を抑止する状態管理（atom による 4 状態管理とクールダウン）。
 - **ブラウザプロファイル永続化 & 排他制御**:
   - `doc/work/browser_profile/` をユーザーデータディレクトリとして永続化し、PerimeterX / Kasada の検証済みセッションCookie（`_px3`, `_pxhd` 等）やストレージを保持。
-  - `SemaphoreSlim(1, 1)` による巡回実行の排他制御（`SingletonLock` 競合防止）。
-- **アンチBot対策 & 耐障害性**:
-  - `navigator.webdriver` 偽装、Cookie自動承諾、ランダムジッター、タイムアウト＆指数バックオフ。
-  - Skyscanner における 2段階アクセス（公式トップページ事前ウォームアップ ➔ Referer 保持ナビゲーション）。
-  - `PRESS & HOLD` チャレンジ検知時の中心座標自動長押し試行（5.5秒）および有頭手動支援モード（最大60秒待機）のシームレス連携。
+  - **SingletonLock 残留防止**: クラッシュや強制終了時に残留した `SingletonLock` / `SingletonCookie` 等を起動前に検知・安全にクリーンアップするフォールバックを組み込み、次回起動不能を防止。
+  - `SemaphoreSlim(1, 1)`（`scraper-lock`）による同一プロセス内巡回実行の排他制御。
+  - プロセス終了フック (`ProcessExit`) による確実なリソース破棄。
+- **ステルス (Stealth) 設定 & ブラウザコンテキスト**:
+  - `LaunchPersistentContextAsync` による永続コンテキスト生成。
+  - `AddInitScriptAsync` による Stealth 注入スクリプト:
+    - `Object.defineProperty(navigator, 'webdriver', {get: () => undefined})`
+    - `window.chrome = { runtime: {} }`
+    - `navigator.languages`（`ja-JP, ja, en-US, en`）、`plugins`、`permissions.query` 偽装。
+  - 日本語ロケール (`ja-JP`)、タイムゾーン (`Asia/Tokyo`)、BypassCSP, IgnoreHTTPSErrors, Sec-Ch-Ua ヘッダーの適用。
+  - ヘッドレスモード時は `ViewportSize: 1440x900`、有頭モード時は `SlowMo: 150ms`、`--start-maximized`、`ViewportSize: nil`（ウィンドウサイズ自動追従）。
+- **Google Flights スクレイピング**:
+  - 検索URL遷移（`DOMContentLoaded`、30秒タイムアウト）。
+  - Cookie / 同意ダイアログの自動スキップ（`button[aria-label*='同意'], button[aria-label*='Accept']`）。
+  - 検索結果カード待機ポーリング（`li.pIav2d, div.yR1fYc` 等、スタックを消費しない `loop/recur` 構造）。
+  - 画面キャプチャ保存 (`doc/work/screenshots/yyyyMMdd-HHmmss_GoogleFlights_[taskId].png`)。
+  - カードDOM要素からの価格、航空会社、発着時刻、所要時間、乗継数の抽出と `FlightOffer` 生成。
+- **Skyscanner スクレイピング & アンチBot対策**:
+  - 公式トップページ (`https://www.skyscanner.jp/`) への事前ウォームアップ（セッションCookie・テレメトリ確立、自然なマウス移動、Cookie受諾）。
+  - Referer `https://www.skyscanner.jp/` を保持した検索URLへのアクセス。
+  - **Bot検知（PerimeterX / Cloudflare: PRESS & HOLD）の自動検知**:
+    - タイトル、本文、CAPTCHA要素（`#px-captcha` 等）の複合検知（`detect-bot-challenge` 純粋関数）。
+    - 検知時スクリーンショット保存 (`yyyyMMdd-HHmmss_Skyscanner_BotChallenge_[taskId].png`)。
+    - 自然なマウス移動軌跡（直線ワープ回避）による要素中心への移動と、5.5秒間の長押しホールド（`MouseDownAsync` ➔ 5.5s ➔ `MouseUpAsync`）。
+    - 有頭ブラウザモード時はユーザー向け手動解除ガイダンス出力と最大60秒の待機猶予。
+  - 検索結果カード待機ポーリング（`div[data-testid='flight-card']` 等）と `FlightOffer` 生成。
+- **定期巡回バックグラウンドワーカーとの連携**:
+  - タスクの `is_headless` とシステム全体設定の `headless_mode` を合成した実効ヘッドレス制御。
+  - 巡回完了後の `finally` によるページクローズ、コンテキストクローズ、Playwright インスタンスの完全破棄。
 
 ### 3.5 時刻・タイムゾーン統一表示仕様 (Timezone & Schedule Standard)
 
