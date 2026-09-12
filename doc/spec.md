@@ -51,20 +51,19 @@ flowchart TD
 
 ### 3.1 監視タスク管理機能 (Watch Task Management)
 
-- **登録項目**:
-  - `Title`: タスク名（任意）
+- **登録項目（全12項目・手動登録モーダルおよびスタンドアロン登録画面で完全統一）**:
+  - `Title`: タスク名（任意、未入力時は `[Origin] ➔ [Destination]` で自動補完）
   - `Origin`: 出発地（IATAコード / 都市名サジェスト）
   - `Destination`: 目的地（IATAコード / 都市名サジェスト）
-  - `TripType`: 往復 (`RoundTrip`) または 片道 (`OneWay`)
-  - `OutboundDate`: 往路出発日 (`YYYY-MM-DD`)
-  - `InboundDate`: 復路出発日 (`YYYY-MM-DD`、片道時はNULL)
-  - `PreferredAirlines`: 優先・指定航空会社（複数指定可）
-  - `MaxStops`: 許容乗継回数 (直行のみ: `0`, 1回以下: `1`, 指定なし: `Any`)
-  - `TargetPrice`: 目標アラート価格 (JPY、整数、任意)
-  - `CheckIntervalHours`: 巡回間隔（未指定時はシステム全体のデフォルト巡回間隔を採用）
-  - `NotificationWebhookUrl`: 個別Webhook URL (未指定時はグローバル設定URLを使用、OFF指定時は `"DISABLED"` を格納し通知完全停止)
-  - `UseDefaultWebhook`: デフォルトの Discord / Slack Webhook に通知するか否か (デフォルト: true)
-  - `ShowBrowser`: 定期巡回時もブラウザを表示する (手動支援モード、デフォルト: false)
+  - `TripType`: 旅行タイプ（往復: `RoundTrip` または 片道: `OneWay`）
+  - `OutboundDate`: 往路出発日 (`YYYY-MM-DD`、本日以降ガード `min` 属性付き)
+  - `InboundDate`: 復路出発日 (`YYYY-MM-DD`、本日以降ガード `min` 属性付き、片道時は非表示)
+  - `MaxStops`: 許容乗継回数（乗継制限なし: `Any`, 1回乗継まで: `OneStop`, 直行便のみ: `DirectOnly`）
+  - `CheckIntervalHours`: 巡回間隔（全体設定に従う、または 3h/6h/12h/24h）
+  - `TargetPriceJpy`: 目標アラート価格 (JPY、整数、任意)
+  - `UserNotes`: 構造化メモ / 要望・制約（任意、Markdown・箇条書き対応）
+  - `UseDefaultWebhook`: デフォルトの Discord / Slack Webhook に通知する (デフォルト: ON、OFF時は `"DISABLED"` を格納し通知完全停止)
+  - `ShowBrowser`: 定期巡回時もブラウザを表示する (手動支援モード、デフォルト: OFF)
 
 ### 3.2 複数航空会社（トランジット・往復別社）のデータ構造と表示仕様
 
