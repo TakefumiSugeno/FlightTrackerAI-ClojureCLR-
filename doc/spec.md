@@ -119,12 +119,14 @@ flowchart TD
 システム全体のビジュアルデザイン、レイアウト、コンポーネント構成は、プロトタイプ原典である `doc/mock/index.html` に100%厳格準拠する。
 
 ### 4.0 共通UI基盤・スタイル標準
+
 - **デザインシステム・カラー**: Tailwind CSS。ダークテーマベース（`bg-slate-900`, `text-slate-100`, `bg-slate-950`）。
 - **カスタムパレット (`skyline`)**: `#0284c7`, `#0369a1`, `#075985`, `#0c4a6e`, `#082f49` などの航空監視用スカイブルー階調。
 - **アイコン標準**: **Lucide Icons** (`https://unpkg.com/lucide@latest`) を全面統一採用（`<i data-lucide="..."></i>`）。FontAwesome 等の他ライブラリは使用せず、細線でモダンな航空券ダッシュボードの質感を担保する。
 - **フォント**: サンセリフ系 (`font-sans antialiased`)、数値・コード表示部は等幅フォント (`font-mono`)。
 
 ### 4.1 メイン画面構成
+
 1. **ヘッダー (Header)**:
    - 左部: 飛行機ロゴ (`plane`、スカイブルー背景角丸アイコン)、タイトル「FlightTracker**AI**」（AI部は `text-sky-400`）、サブタイトル「Google Flights & Skyscanner 自動巡回・価格監視」。
    - 右部:
@@ -162,6 +164,7 @@ flowchart TD
    - タスク未登録時に表示される洗練されたプレースホルダー。飛行機スラッシュアイコン (`plane-off` / `plane-slash`)、「タスクを登録する」ボタン、「AIアシスタントへ移動」ボタン。
 
 ### 4.2 各種モーダル仕様 (Modals Standard)
+
 1. **MODAL 1: 詳細モーダル (`#detailModal`)**:
    - ヘッダー: タスク名、区間、目標価格。
    - AI Advice Box (`sparkles` アイコン、買い時予測、AIによる詳細解説)。

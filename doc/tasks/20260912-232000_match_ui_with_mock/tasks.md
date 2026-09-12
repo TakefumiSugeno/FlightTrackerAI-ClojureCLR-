@@ -115,7 +115,7 @@
   - `layout_tests.clj`, `dashboard_tests.clj`, `modals_tests.clj`, `api_controller_tests.clj` 等のテストを改修後のUIに合わせて更新。
   - `./scripts/test.ps1` を実行し、全テスト合格（OK: 453, NG: 0）およびカバレッジ 94.9%（目標 80% 以上達成）を確認。
   - `doc/work/TestResults/TestResults.html` および `doc/work/CoverageReport/index.html` を出力。
-- [ ] **WI-10: ドキュメント事後同期 & 成果物レビュー・コミット (Step 4)**
+- [x] **WI-10: ドキュメント事後同期 & 成果物レビュー・コミット (Step 4)**
   - 実装後の仕様書・詳細設計書同期。
   - サブエージェントレビュー実施およびユーザー最終確認。
 

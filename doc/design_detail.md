@@ -99,10 +99,10 @@ FlightTrackerAI(ClojureCLR)/
   - **Lucide Icons**: モック原典と完全一致させるため、`<script src="https://unpkg.com/lucide@latest"></script>` を採用。FontAwesome は全廃し、細線でモダンな航空券ダッシュボード表現に統一。
   - **HTMX ライフサイクル連携**: HTMX による動的 DOM 差し替え（`hx-swap`, OOB swap）時にもアイコンが正常に SVG 展開されるよう、以下のグローバルフックを `layout.clj` に設置:
     ```javascript
-    document.addEventListener('htmx:afterSwap', function() {
+    document.addEventListener("htmx:afterSwap", function () {
       if (window.lucide) lucide.createIcons();
     });
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener("DOMContentLoaded", function () {
       if (window.lucide) lucide.createIcons();
     });
     ```
