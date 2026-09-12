@@ -76,7 +76,7 @@
       [:div {:id "modal-container"}]
 
       ;; Client-Side Scripts
-      [:script (h/raw "
+      [:script {} (h/raw "
         // --- Modal & Navigation State Machine ---
         window.__modalState = {
           isOpen: false,
