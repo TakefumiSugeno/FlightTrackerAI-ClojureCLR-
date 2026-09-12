@@ -73,12 +73,12 @@
 
 ### フェーズ1 (MVP)
 
-- [ ] 監視タスクの登録・一覧・削除機能
-- [ ] Google Flights & Skyscanner を対象とした Playwright 自動スクレイピング（定期実行）
-- [ ] SQLite へのデータ保存と価格履歴の記録
-- [ ] Webダッシュボードでのタスク一覧、便一覧、価格推移グラフ表示
-- [ ] OpenRouter を活用した自然言語からの検索条件パース
-- [ ] 価格下落時の Discord/Slack Webhook 通知
+- [x] 監視タスクの登録・一覧・削除機能
+- [x] Google Flights & Skyscanner を対象とした Playwright 自動スクレイピング（定期実行）
+- [x] SQLite へのデータ保存と価格履歴の記録
+- [x] Webダッシュボードでのタスク一覧、便一覧、価格推移グラフ表示
+- [x] OpenRouter を活用した自然言語からの検索条件パース
+- [x] 価格下落時の Discord/Slack Webhook 通知
 
 ### フェーズ2 (機能拡張)
 

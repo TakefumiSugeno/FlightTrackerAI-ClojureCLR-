@@ -64,9 +64,9 @@
 ### ① エージェントによるタスク実行（実装・TDD） & 自動フォーマット
 
 - ソースコードとテストコードは原則 **1：1 の対応・命名構成** で作成する。
-  - **命名規則**: `src/[Project]/[Path]/[FileName].fs` ⇔ `test/[Project].Tests/[Path]/[FileName]Tests.fs`
-  - ファイル名から対応関係が一目で推測できるように統一する（例: `Domain.fs` ⇔ `DomainTests.fs`）。
-  - 複数コンポーネントを統合する結合・E2Eテストは `test/[Project].Tests/Integration/` 等に配置し、単体テストと明確に分離する。
+  - **命名規則**: `src/[Project]/[Path]/[file_name].clj` ⇔ `test/[Project].Tests/[Path]/[file_name]_tests.clj`（※万一の代替時: `[FileName].fs` ⇔ `[FileName]Tests.fs`）
+  - ファイル名から対応関係が一目で推測できるように統一する（例: `domain.clj` ⇔ `domain_tests.clj`）。
+  - 複数コンポーネントを統合する結合・E2Eテストは `test/[Project].Tests/integration/` 等に配置し、単体テストと明確に分離する。
 - テスト先行 (Test First) で実装する。
 - **コードおよび各種ドキュメント（.md, UIモック等）のファイルを作成・更新した直後は、必ずプロジェクト定義の自動フォーマット処理を実行する。**
 - テスト実行時には、必ず **以下2つのHTML視覚レポートを出力・確認** すること（実行コマンド: `./scripts/test.ps1`）。

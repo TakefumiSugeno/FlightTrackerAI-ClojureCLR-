@@ -39,6 +39,7 @@ FlightTrackerAI(ClojureCLR)/
 │   │   └── FlightTrackerAI.Infrastructure.csproj
 │   │
 │   └── FlightTrackerAI.Web/           # Web UI & HTTP サーバーホスト (純粋 ClojureCLR)
+│       ├── Program.fs                 # .NET 10 実行ブートストラップホスト
 │       ├── flight_tracker_ai/web/
 │       │   ├── views/
 │       │   │   ├── html_dsl.clj       # 純粋関数 Hiccup 風 HTML レンダリングエンジン
@@ -48,7 +49,7 @@ FlightTrackerAI(ClojureCLR)/
 │       │   ├── controllers/
 │       │   │   └── api_controller.clj # JSON REST API エンドポイント
 │       │   └── server.clj             # (-main) エントリーポイント & HTTP リクエストディスパッチャ
-│       └── FlightTrackerAI.Web.csproj
+│       └── FlightTrackerAI.Web.fsproj
 │
 └── test/
     ├── test_runner.clj                # Clojure 製テストランナー & HTML レポート自動生成
@@ -72,6 +73,7 @@ FlightTrackerAI(ClojureCLR)/
     │   └── Fixtures/                  # オフライン HTML フィクスチャ
     └── FlightTrackerAI.Web.Tests/
         ├── views/
+        │   ├── html_dsl_tests.clj
         │   ├── layout_tests.clj
         │   ├── dashboard_tests.clj
         │   └── modals_tests.clj
@@ -106,40 +108,107 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
   (:require [flight-tracker-ai.web.controllers.api-controller :as api]
             [flight-tracker-ai.web.views.dashboard :as dash]
             [flight-tracker-ai.web.views.layout :as layout]
+            [flight-tracker-ai.web.views.modals :as modals]
             [flight-tracker-ai.infrastructure.database :as db]
-            [flight-tracker-ai.infrastructure.scraping-worker :as worker])
-  (:import [System.Net HttpListener HttpListenerContext]
+            [flight-tracker-ai.infrastructure.task-repository :as task-repo]
+            [flight-tracker-ai.infrastructure.scraping-worker :as worker]
+            [flight-tracker-ai.infrastructure.app-logger :as logger])
+  (:import [System Uri]
+           [System.Net HttpListener HttpListenerContext]
+           [System.IO File StreamReader]
            [System.Text Encoding]
-           [System.IO StreamReader]))
+           [System.Threading Thread ThreadPool WaitCallback]))
 
-(defn handle-request [^HttpListenerContext ctx]
-  ;; Ringライクなリクエスト処理
+(defn ascii-safe-header? [s]
+  (and (string? s) (boolean (re-matches #"^[\x20-\x7E]+$" s))))
+
+(defn write-response
+  ([^HttpListenerResponse resp status content-type body-str]
+   (write-response resp status content-type body-str nil))
+  ([^HttpListenerResponse resp status content-type body-str headers]
+   (try
+     (set! (.StatusCode resp) status)
+     (set! (.ContentType resp) content-type)
+     (when (map? headers)
+       (doseq [[k v] headers]
+         (let [k-str (name k)
+               v-str (str v)]
+           (when (and (ascii-safe-header? k-str) (ascii-safe-header? v-str))
+             (.AddHeader resp k-str v-str)))))
+     (let [bytes (.GetBytes Encoding/UTF8 (or body-str ""))
+           output (.OutputStream resp)]
+       (set! (.ContentLength64 resp) (long (count bytes)))
+       (.Write output bytes 0 (count bytes))
+       (.Close output))
+     (catch Exception _ nil))))
+
+(defn handle-request [^String connection-string ^HttpListenerContext ctx]
   (let [req (.Request ctx)
         resp (.Response ctx)
-        uri (.RawUrl req)
-        method (.HttpMethod req)]
+        method (.HttpMethod req)
+        raw-url (.RawUrl req)
+        body-str (read-body (.InputStream req))]
     (try
       (cond
-        (= uri "/") (write-html resp (dash/render-dashboard))
-        (.StartsWith uri "/api/") (api/handle-api req resp)
-        :else (not-found resp))
+        (and (= method "GET") (or (= raw-url "/") (= raw-url "/index.html")))
+        (let [tasks (task-repo/get-all-tasks connection-string)
+              content (dash/render-dashboard-content tasks)
+              full-html (layout/base-layout "ダッシュボード" content)]
+          (write-response resp 200 "text/html; charset=utf-8" full-html))
+
+        (and (= method "GET") (.StartsWith raw-url "/tasks/new"))
+        (let [uri (Uri. (str "http://localhost" raw-url))
+              query (api/parse-query-string (.Query uri))
+              content (modals/render-standalone-new-task-page query)
+              full-html (layout/base-layout "新規タスク登録" content)]
+          (write-response resp 200 "text/html; charset=utf-8" full-html))
+
+        (and (= method "GET") (= raw-url "/favicon.svg"))
+        (let [fav (first (filter #(File/Exists %) ["wwwroot/favicon.svg" "src/FlightTrackerAI.Web/wwwroot/favicon.svg"]))]
+          (if fav
+            (write-response resp 200 "image/svg+xml" (File/ReadAllText fav))
+            (write-response resp 404 "text/plain" "Not Found")))
+
+        (.StartsWith raw-url "/api/")
+        (let [res (api/handle-api-request connection-string method raw-url body-str)]
+          (write-response resp (:status res) (:content-type res) (:body res) (:headers res)))
+
+        :else
+        (write-response resp 404 "text/plain; charset=utf-8" "Not Found"))
       (catch Exception ex
-        (server-error resp ex))
-      (finally
-        (.Close resp)))))
+        (logger/error-ex "Server" "リクエストハンドリング例外" ex)
+        (write-response resp 500 "text/plain; charset=utf-8" (str "Internal Server Error: " (.Message ex)))))))
+
+(defn start-server [^String connection-string ^String port]
+  (let [listener (HttpListener.)
+        prefix (str "http://localhost:" port "/")]
+    (.Add (.Prefixes listener) prefix)
+    (.Start listener)
+    (logger/info "Server" (str "FlightTrackerAI サーバーが起動しました: " prefix))
+    (let [t (Thread.
+              (gen-delegate System.Threading.ThreadStart []
+                (while (.IsListening listener)
+                  (try
+                    (let [ctx (.GetContext listener)]
+                      (ThreadPool/QueueUserWorkItem
+                        (gen-delegate WaitCallback [state]
+                          (handle-request connection-string state))
+                        ctx))
+                    (catch Exception _ nil)))))]
+      (set! (.IsBackground t) true)
+      (.Start t)
+      listener)))
 
 (defn -main [& args]
-  (let [port (or (first args) "5000")
-        listener (HttpListener.)]
-    (db/migrate!)
-    (worker/start-worker!)
-    (.Add (.Prefixes listener) (str "http://localhost:" port "/"))
-    (.Start listener)
-    (println (str "FlightTrackerAI running at http://localhost:" port "/"))
-    (while (.IsListening listener)
-      (let [ctx (.GetContext listener)]
-        (System.Threading.ThreadPool/QueueUserWorkItem
-          (sys-func [WaitCallback Object] [_] (handle-request ctx)))))))
+  (let [port (or (first args) "5121")
+        conn-str "Data Source=flight_tracker.db"]
+    (db/initialize-database conn-str)
+    (worker/start-worker! conn-str)
+    (let [listener (start-server conn-str port)]
+      (println (str "Server running on http://localhost:" port "/ (Press Enter to stop)"))
+      (read-line)
+      (.Stop listener)
+      (worker/stop-worker!))))
 ```
 
 ### 2.3 モーダルナビゲーション・ライフサイクル設計 (Modal Navigation & Lifecycle)
