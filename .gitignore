@@ -40,7 +40,8 @@ doc/work/*.db
 doc/work/*.db*
 [Tt]est[Rr]esults/
 !doc/work/TestResults/
-!doc/work/CoverageReport/
+!doc/work/TestResults/latest/
+doc/work/TestResults/20*
 *.cobertura.xml
 doc/work/screenshots/
 

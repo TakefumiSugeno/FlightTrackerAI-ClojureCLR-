@@ -22,17 +22,24 @@ $testExitCode = $LASTEXITCODE
 
 # 4. レポート生成確認
 Write-Host "`n[3/3] テストレポート出力検証..." -ForegroundColor Yellow
-$resultsPath = "doc/work/TestResults/TestResults.html"
-$coveragePath = "doc/work/CoverageReport/index.html"
+$latestDir = "doc/work/TestResults/latest"
+$resultsPath = Join-Path $latestDir "TestResults.html"
+$coveragePath = Join-Path $latestDir "CoverageReport.html"
+
+# 最新の日時フォルダを取得して表示
+$historyDirs = Get-ChildItem "doc/work/TestResults" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d{8}-\d{6}$' } | Sort-Object Name -Descending
+if ($historyDirs -and $historyDirs.Count -gt 0) {
+    Write-Host "✔ 実行履歴レポート: $($historyDirs[0].FullName)" -ForegroundColor Cyan
+}
 
 if (Test-Path $resultsPath) {
-    Write-Host "✔ テスト合否レポート: $resultsPath" -ForegroundColor Green
+    Write-Host "✔ テスト合否レポート (Latest): $resultsPath" -ForegroundColor Green
 } else {
     Write-Warning "テスト合否レポートが生成されていません: $resultsPath"
 }
 
 if (Test-Path $coveragePath) {
-    Write-Host "✔ カバレッジレポート: $coveragePath" -ForegroundColor Green
+    Write-Host "✔ カバレッジレポート (Latest): $coveragePath" -ForegroundColor Green
 } else {
     Write-Warning "カバレッジレポートが生成されていません: $coveragePath"
 }

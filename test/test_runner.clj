@@ -128,7 +128,7 @@
     <div class=\"header\">
       <div>
         <h1 style=\"margin:0;font-size:24px;\">FlightTrackerAI Test Execution Report</h1>
-        <p style=\"margin:4px 0 0 0;font-size:12px;color:#94a3b8;\">実行日時: " date-str " • 100% ClojureCLR (.NET 10)</p>
+        <p style=\"margin:4px 0 0 0;font-size:12px;color:#94a3b8;\">実行日時: " date-str " • 100% ClojureCLR (.NET 10) • <a href=\"CoverageReport.html\" style=\"color:#38bdf8;text-decoration:none;\">📊 カバレッジレポートを表示 ➔</a></p>
       </div>
       <div>
         <span style=\"font-size:18px;font-weight:bold;padding:8px 16px;border-radius:8px;" (if is-all-ok "background:#064e3b;color:#34d399;border:1px solid #059669;" "background:#4c0519;color:#fb7185;border:1px solid #e11d48;") "\">"
@@ -219,7 +219,7 @@
     <div class=\"header\">
       <div>
         <h1 style=\"margin:0;font-size:24px;\">FlightTrackerAI Code Coverage Report</h1>
-        <p style=\"margin:4px 0 0 0;font-size:12px;color:#94a3b8;\">計測日時: " date-str " • 目標: 80% 以上</p>
+        <p style=\"margin:4px 0 0 0;font-size:12px;color:#94a3b8;\">計測日時: " date-str " • 目標: 80% 以上 • <a href=\"TestResults.html\" style=\"color:#38bdf8;text-decoration:none;\">✔ テスト合否一覧を表示 ➔</a></p>
       </div>
       <div>
         <div class=\"badge\">Overall: " overall-coverage "%</div>
@@ -251,7 +251,16 @@
   (doseq [ns-sym test-namespaces]
     (require ns-sym))
   (let [summary (atom {:test 0 :pass 0 :fail 0 :error 0})
-        old-report t/report]
+        old-report t/report
+        jst-now (.ToOffset (DateTimeOffset/UtcNow) (TimeSpan/FromHours 9.0))
+        run-timestamp (.ToString jst-now "yyyyMMdd-HHmmss")
+        base-results-dir (Path/Combine (into-array String ["doc" "work" "TestResults"]))
+        run-dir (Path/Combine (into-array String [base-results-dir run-timestamp]))
+        latest-dir (Path/Combine (into-array String [base-results-dir "latest"]))
+        run-results-path (Path/Combine (into-array String [run-dir "TestResults.html"]))
+        run-coverage-path (Path/Combine (into-array String [run-dir "CoverageReport.html"]))
+        latest-results-path (Path/Combine (into-array String [latest-dir "TestResults.html"]))
+        latest-coverage-path (Path/Combine (into-array String [latest-dir "CoverageReport.html"]))]
     (binding [t/report (fn [m]
                          (custom-report m)
                          (case (:type m)
@@ -266,8 +275,14 @@
     (println "TOTAL TEST EXECUTION SUMMARY:")
     (println @summary)
     (println "=======================================================\n")
-    (generate-test-results-html @summary @test-details "doc/work/TestResults/TestResults.html")
-    (generate-coverage-html "doc/work/CoverageReport/index.html")
+    ;; 1. テスト実行ごとの日時サブフォルダに出力 (履歴保持)
+    (generate-test-results-html @summary @test-details run-results-path)
+    (generate-coverage-html run-coverage-path)
+    ;; 2. latest ディレクトリにも複製出力 (固定パスアクセス用)
+    (generate-test-results-html @summary @test-details latest-results-path)
+    (generate-coverage-html latest-coverage-path)
+    (println (str "\n✔ テスト結果出力先: " run-dir))
+    (println (str "✔ 最新結果リンク: " latest-dir))
     (if (or (> (:fail @summary) 0) (> (:error @summary) 0))
       (System.Environment/Exit 1)
       (System.Environment/Exit 0))))
