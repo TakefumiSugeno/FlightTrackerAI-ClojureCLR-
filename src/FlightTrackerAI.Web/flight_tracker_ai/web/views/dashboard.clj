@@ -31,12 +31,14 @@
         lowest-price (:last-lowest-price-jpy task-item)
         is-price-met (and target-price lowest-price (<= lowest-price target-price))
         trip (:trip-type task-item)
+        ob-val (or (:outbound-date trip) (:outbound trip))
+        ib-val (or (:inbound-date trip) (:inbound trip))
         dates-str (if (= (:kind trip) :round-trip)
-                    (str (when-let [d (:outbound-date trip)] (.ToString ^DateOnly d "yyyy/MM/dd"))
+                    (str (when-let [d ob-val] (.ToString ^DateOnly d "yyyy/MM/dd"))
                          " - "
-                         (when-let [d (:inbound-date trip)] (.ToString ^DateOnly d "yyyy/MM/dd"))
+                         (when-let [d ib-val] (.ToString ^DateOnly d "yyyy/MM/dd"))
                          " (往復)")
-                    (str (when-let [d (:outbound-date trip)] (.ToString ^DateOnly d "yyyy/MM/dd"))
+                    (str (when-let [d ob-val] (.ToString ^DateOnly d "yyyy/MM/dd"))
                          " (片道)"))
         [date-part time-part] (format-jst (:last-checked-at task-item))
         origin-str (domain/iata-code-value (:origin task-item))
@@ -208,12 +210,14 @@
             [:div {:class "font-bold font-mono text-sky-400"} (str origin-str " ➔ " dest-str)]
             [:div {:class "text-[10px] text-slate-400"} (if (= (:kind trip) :round-trip) "往復" "片道")]]
            ;; 3. 日程
-           [:td {:class "px-3 py-2.5 text-slate-300 whitespace-nowrap"}
-            (if (= (:kind trip) :round-trip)
-              [:div
-               [:div (when-let [d (:outbound-date trip)] (.ToString ^DateOnly d "MM/dd"))]
-               [:div {:class "text-[10px] text-slate-400"} (str "~ " (when-let [d (:inbound-date trip)] (.ToString ^DateOnly d "MM/dd")))]]
-              [:div (when-let [d (:outbound-date trip)] (.ToString ^DateOnly d "yyyy/MM/dd"))])]
+            [:td {:class "px-3 py-2.5 text-slate-300 whitespace-nowrap"}
+             (let [ob (or (:outbound-date trip) (:outbound trip))
+                   ib (or (:inbound-date trip) (:inbound trip))]
+               (if (= (:kind trip) :round-trip)
+                 [:div
+                  [:div (when-let [d ob] (.ToString ^DateOnly d "MM/dd"))]
+                  [:div {:class "text-[10px] text-slate-400"} (str "~ " (when-let [d ib] (.ToString ^DateOnly d "MM/dd")))]]
+                 [:div (when-let [d ob] (.ToString ^DateOnly d "yyyy/MM/dd"))]))]
            ;; 4. 乗継 & 所要時間
            [:td {:class "px-3 py-2.5 text-slate-300"}
             [:div {:class "font-medium"} (case (:max-stops t)

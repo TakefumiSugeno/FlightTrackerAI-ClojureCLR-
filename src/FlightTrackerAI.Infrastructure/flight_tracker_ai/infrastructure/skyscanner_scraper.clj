@@ -8,13 +8,15 @@
 (defn build-search-url [task-item]
   (let [origin-str (.ToLowerInvariant ^String (domain/iata-code-value (:origin task-item)))
         dest-str (.ToLowerInvariant ^String (domain/iata-code-value (:destination task-item)))
-        trip (:trip-type task-item)]
+        trip (:trip-type task-item)
+        ob ^DateOnly (or (:outbound trip) (:outbound-date trip))
+        ib ^DateOnly (or (:inbound trip) (:inbound-date trip))]
     (if (= (:kind trip) :round-trip)
-      (let [ob-date (.ToString ^DateOnly (:outbound trip) "yyMMdd")
-            ib-date (.ToString ^DateOnly (:inbound trip) "yyMMdd")]
+      (let [ob-date (.ToString ob "yyMMdd")
+            ib-date (.ToString ib "yyMMdd")]
         (str "https://www.skyscanner.jp/transport/flights/" origin-str "/" dest-str "/" ob-date "/" ib-date
              "/?adultsv2=1&cabinclass=economy&currency=JPY"))
-      (let [ob-date (.ToString ^DateOnly (:outbound trip) "yyMMdd")]
+      (let [ob-date (.ToString ob "yyMMdd")]
         (str "https://www.skyscanner.jp/transport/flights/" origin-str "/" dest-str "/" ob-date
              "/?adultsv2=1&cabinclass=economy&currency=JPY")))))
 

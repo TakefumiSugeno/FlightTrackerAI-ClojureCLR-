@@ -58,7 +58,20 @@
           (is (= 148200 (:last-lowest-price-jpy restored)))
           (is (= "ANA + SQ / 復: AF" (:last-lowest-airlines restored)))
           (is (= :google-flights (:last-lowest-provider restored)))
-          (is (= "現在最安値圏内です" (:ai-analysis-summary restored))))))))
+          (is (= "現在最安値圏内です" (:ai-analysis-summary restored))))))
+
+  (testing "task->row supports both :outbound and :outbound-date keys"
+    (let [task-with-date-keys {:id (Guid/NewGuid)
+                               :title "キー互換テスト"
+                               :origin "HND"
+                               :destination "MNL"
+                               :trip-type {:kind :round-trip
+                                           :outbound-date (DateOnly. 2026 10 1)
+                                           :inbound-date (DateOnly. 2026 10 10)}
+                               :status :active}
+          row (dto/task->row task-with-date-keys)]
+      (is (= "2026-10-01" (:outbound_date row)))
+      (is (= "2026-10-10" (:inbound_date row)))))))
 
 (deftest test-offer-row-roundtrip
   (testing "offer->row and row->offer roundtrip correctly preserves fields"

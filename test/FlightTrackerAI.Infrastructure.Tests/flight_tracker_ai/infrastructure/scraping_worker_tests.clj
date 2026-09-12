@@ -35,9 +35,13 @@
   (testing "is-task-expired identifies past outbound flights"
     (let [today (DateOnly. 2026 8 30)
           past-task {:trip-type {:kind :one-way :outbound (DateOnly. 2026 8 1)}}
-          future-task {:trip-type {:kind :one-way :outbound (DateOnly. 2026 9 15)}}]
+          today-task {:trip-type {:kind :one-way :outbound (DateOnly. 2026 8 30)}}
+          future-task {:trip-type {:kind :one-way :outbound (DateOnly. 2026 9 15)}}
+          date-key-future-task {:trip-type {:kind :one-way :outbound-date (DateOnly. 2026 9 15)}}]
       (is (true? (worker/is-task-expired today past-task)))
-      (is (false? (worker/is-task-expired today future-task))))))
+      (is (false? (worker/is-task-expired today today-task)))
+      (is (false? (worker/is-task-expired today future-task)))
+      (is (false? (worker/is-task-expired today date-key-future-task))))))
 
 (deftest test-execute-task-scraping-auto-complete
   (testing "execute-task-scraping auto-completes expired tasks in DB"

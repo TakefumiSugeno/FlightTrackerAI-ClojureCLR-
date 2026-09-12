@@ -1,7 +1,10 @@
 (ns flight-tracker-ai.core.dto
   (:require [flight-tracker-ai.core.domain :as domain]
             [clojure.string :as str])
-  (:import [System Guid DateTimeOffset DateOnly]))
+  (:import [System Guid DateTimeOffset DateOnly TimeSpan]))
+
+(defn- get-jst-today []
+  (DateOnly/FromDateTime (.DateTime (.ToOffset (DateTimeOffset/UtcNow) (TimeSpan/FromHours 9.0)))))
 
 ;; -------------------------------------------------------------
 ;; 1. JSON Helpers (Pure Clojure & robust fallback)
@@ -41,13 +44,15 @@
 (defn task->row [task]
   (let [trip (or (:trip-type task) {})
         is-round (= (:kind trip) :round-trip)
-        outbound-str (if (instance? DateOnly (:outbound trip))
-                       (.ToString ^DateOnly (:outbound trip) "yyyy-MM-dd")
-                       (str (or (:outbound trip) "")))
+        outbound-val (or (:outbound trip) (:outbound-date trip))
+        inbound-val (or (:inbound trip) (:inbound-date trip))
+        outbound-str (if (instance? DateOnly outbound-val)
+                       (.ToString ^DateOnly outbound-val "yyyy-MM-dd")
+                       (str (or outbound-val "")))
         inbound-str (when is-round
-                      (if (instance? DateOnly (:inbound trip))
-                        (.ToString ^DateOnly (:inbound trip) "yyyy-MM-dd")
-                        (when (:inbound trip) (str (:inbound trip)))))
+                      (if (instance? DateOnly inbound-val)
+                        (.ToString ^DateOnly inbound-val "yyyy-MM-dd")
+                        (when inbound-val (str inbound-val))))
         trip-type-str (if is-round "RoundTrip" "OneWay")
         status (:status task)
         [status-str error-msg] (cond
@@ -101,13 +106,19 @@
         dest-res
         (let [is-round (and (= (:trip_type row) "RoundTrip") (not (str/blank? (:inbound_date row))))
               outbound-date (try (DateOnly/Parse (:outbound_date row))
-                                 (catch Exception _ (DateOnly/FromDateTime System.DateTime/UtcNow)))
+                                 (catch Exception _ (get-jst-today)))
               inbound-date (when is-round
                              (try (DateOnly/Parse (:inbound_date row))
                                   (catch Exception _ nil)))
               trip-type (if is-round
-                          {:kind :round-trip :outbound outbound-date :inbound inbound-date}
-                          {:kind :one-way :outbound outbound-date})
+                          {:kind :round-trip
+                           :outbound outbound-date
+                           :outbound-date outbound-date
+                           :inbound inbound-date
+                           :inbound-date inbound-date}
+                          {:kind :one-way
+                           :outbound outbound-date
+                           :outbound-date outbound-date})
               pref-airlines (from-json-array-strings (:preferred_airlines row))
               max-stops (domain/max-stops-from-string (:max_stops row))
               status (domain/task-status-from-string (:status row) (:error_message row))

@@ -60,11 +60,27 @@
       (is (str/includes? (:body res) "HND"))
       (is (str/includes? (:body res) "CDG"))
       (let [tasks (task-repo/get-all-tasks conn-str)
-            task-id (:id (first tasks))
-            del-res (api/handle-api-request conn-str "DELETE" (str "/api/tasks/" task-id) nil)]
-        (is (= 200 (:status del-res)))
-        (is (= "closeModal" (get-in del-res [:headers "HX-Trigger"])))
-        (is (= 0 (count (task-repo/get-all-tasks conn-str))))))))
+            created-task (first tasks)
+            trip (:trip-type created-task)
+            task-id (:id created-task)]
+        (is (= (DateOnly. 2026 6 1) (or (:outbound trip) (:outbound-date trip))))
+        (let [del-res (api/handle-api-request conn-str "DELETE" (str "/api/tasks/" task-id) nil)]
+          (is (= 200 (:status del-res)))
+          (is (= "closeModal" (get-in del-res [:headers "HX-Trigger"])))
+          (is (= 0 (count (task-repo/get-all-tasks conn-str)))))))))
+
+(deftest test-post-tasks-standalone-preserves-dates
+  (testing "POST /api/tasks/standalone creates task with correct outbound and inbound dates"
+    (let [conn-str (create-test-db)
+          form-body "title=Standalone%E3%83%86%E3%82%B9%E3%83%88&origin=HND&destination=MNL&tripType=RoundTrip&outboundDate=2026-10-15&inboundDate=2026-10-22&targetPriceJpy=50000"
+          res (api/handle-api-request conn-str "POST" "/api/tasks/standalone" form-body)]
+      (is (= 200 (:status res)))
+      (let [tasks (task-repo/get-all-tasks conn-str)
+            created (first tasks)
+            trip (:trip-type created)]
+        (is (= 1 (count tasks)))
+        (is (= (DateOnly. 2026 10 15) (or (:outbound trip) (:outbound-date trip))))
+        (is (= (DateOnly. 2026 10 22) (or (:inbound trip) (:inbound-date trip))))))))
 
 (deftest test-post-tasks-validation-error-keeps-modal
   (testing "POST /api/tasks with invalid IATA returns modal HTML with error message and without closeModal trigger"

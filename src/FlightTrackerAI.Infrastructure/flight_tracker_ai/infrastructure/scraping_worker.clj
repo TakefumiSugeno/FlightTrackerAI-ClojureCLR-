@@ -28,7 +28,7 @@
 
 (defn is-task-expired [^DateOnly today task-item]
   (let [trip (:trip-type task-item)
-        outbound ^DateOnly (:outbound trip)]
+        outbound ^DateOnly (or (:outbound trip) (:outbound-date trip))]
     (if outbound
       (< (.CompareTo outbound today) 0)
       false)))

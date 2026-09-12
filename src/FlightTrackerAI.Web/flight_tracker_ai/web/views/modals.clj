@@ -59,12 +59,12 @@
                          (:tripType initial-params) (:tripType initial-params)
                          :else "RoundTrip")
          outbound-val (or (when task-opt
-                            (when-let [ob (:outbound-date (:trip-type task-opt))]
+                            (when-let [ob (or (:outbound (:trip-type task-opt)) (:outbound-date (:trip-type task-opt)))]
                               (.ToString ^DateOnly ob "yyyy-MM-dd")))
                           (:outboundDate initial-params)
                           (.ToString (.AddMonths DateTime/UtcNow 1) "yyyy-MM-dd"))
          inbound-val (or (when task-opt
-                           (when-let [ib (:inbound-date (:trip-type task-opt))]
+                           (when-let [ib (or (:inbound (:trip-type task-opt)) (:inbound-date (:trip-type task-opt)))]
                              (.ToString ^DateOnly ib "yyyy-MM-dd")))
                          (:inboundDate initial-params)
                          (.ToString (.AddDays (.AddMonths DateTime/UtcNow 1) 7.0) "yyyy-MM-dd"))

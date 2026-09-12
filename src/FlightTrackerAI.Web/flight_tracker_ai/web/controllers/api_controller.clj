@@ -57,14 +57,18 @@
    dashboard-node
    [:script (h/raw (str "closeCurrentModal(); showToast('" msg "', true);"))]])
 
+(defn- get-jst-today []
+  (DateOnly/FromDateTime (.DateTime (.ToOffset (DateTimeOffset/UtcNow) (TimeSpan/FromHours 9.0)))))
+
 (defn handle-api-request [^String connection-string ^String method ^String raw-url ^String body-str]
-  (let [uri (Uri. (str "http://localhost" raw-url))
+  (let [uri (try (Uri. (str "http://localhost" raw-url)) (catch Exception _ (Uri. "http://localhost/")))
         path (.AbsolutePath uri)
         query (parse-query-string (.Query uri))
-        form (when body-str (parse-form-data body-str))]
+        form (when (and body-str (not (str/blank? body-str)))
+               (parse-form-data body-str))]
     (cond
-      ;; 1. GET /api/tasks/view (HTMX 部分置換: コントロールバーやステータス変更用)
-      (and (= method "GET") (= path "/api/tasks/view"))
+      ;; 1. GET /api/tasks または /api/tasks/view (ダッシュボード部分更新)
+      (and (= method "GET") (or (= path "/api/tasks") (= path "/api/tasks/view")))
       (let [mode (or (:mode query) "card")
             status (or (:status query) "all")
             q-str (or (:query query) "")
@@ -79,7 +83,7 @@
         (if (and prompt (not (str/blank? prompt)))
           (let [settings (settings-repo/get-settings connection-string)
                 client (HttpClient.)
-                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (DateOnly/FromDateTime DateTime/UtcNow))
+                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (get-jst-today))
                 params (if (:ok ai-res)
                          {:origin (:Origin (:ok ai-res))
                           :destination (:Destination (:ok ai-res))
@@ -173,9 +177,17 @@
            :content-type "text/html; charset=utf-8"
            :body (h/render-html (modals/render-task-modal nil form (or (:error origin-res) (:error dest-res))))}
           (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
-                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime DateTime/UtcNow)))
+                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (get-jst-today)))
                 inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
-                trip (if is-round {:kind :round-trip :outbound-date outbound :inbound-date inbound} {:kind :one-way :outbound-date outbound})
+                trip (if is-round
+                       {:kind :round-trip
+                        :outbound outbound
+                        :outbound-date outbound
+                        :inbound inbound
+                        :inbound-date inbound}
+                       {:kind :one-way
+                        :outbound outbound
+                        :outbound-date outbound})
                 target-price (when-not (str/blank? (:targetPriceJpy form))
                                (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
                 settings (settings-repo/get-settings connection-string)
@@ -229,9 +241,17 @@
            :content-type "text/html; charset=utf-8"
            :body (str "<p class='text-rose-400'>エラー: " (or (:error origin-res) (:error dest-res)) "</p>")}
           (let [is-round (and (= (:tripType form) "RoundTrip") (not (str/blank? (:inboundDate form))))
-                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (DateOnly/FromDateTime DateTime/UtcNow)))
+                outbound (try (DateOnly/Parse (:outboundDate form)) (catch Exception _ (get-jst-today)))
                 inbound (when is-round (try (DateOnly/Parse (:inboundDate form)) (catch Exception _ nil)))
-                trip (if is-round {:kind :round-trip :outbound-date outbound :inbound-date inbound} {:kind :one-way :outbound-date outbound})
+                trip (if is-round
+                       {:kind :round-trip
+                        :outbound outbound
+                        :outbound-date outbound
+                        :inbound inbound
+                        :inbound-date inbound}
+                       {:kind :one-way
+                        :outbound outbound
+                        :outbound-date outbound})
                 target-price (when-not (str/blank? (:targetPriceJpy form))
                                (try (long (read-string (:targetPriceJpy form))) (catch Exception _ nil)))
                 interval (try (long (read-string (or (:checkIntervalHours form) "12"))) (catch Exception _ 12))
@@ -441,7 +461,7 @@
            :body "{\"error\":\"プロンプトを入力してください。\"}"}
           (let [settings (settings-repo/get-settings connection-string)
                 client (HttpClient.)
-                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (DateOnly/FromDateTime DateTime/UtcNow))]
+                ai-res (ai-client/parse-flight-query client (:openrouter-api-key settings) prompt (get-jst-today))]
             (if (:ok ai-res)
               {:status 200
                :content-type "application/json; charset=utf-8"
