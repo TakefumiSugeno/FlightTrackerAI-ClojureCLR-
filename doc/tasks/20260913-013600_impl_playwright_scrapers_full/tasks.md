@@ -96,20 +96,20 @@
 - [x] ユーザーへの仕様・設計提示と合意取得 (合意2回目)
 
 ### Phase 3: TDD 実装・検証サイクル (Step 3)
-- [ ] **Step 3-①: テスト先行作成 (Red)**
+- [x] **Step 3-①: テスト先行作成 (Red)**
   - `test/.../scraper_common_tests.clj`: プロファイル解決、SingletonLockクリーンアップ、多重インストール防止 atom
-  - `test/.../google_flights_scraper_tests.clj`: URL生成、満席/表記揺れパース、抽出ヘルパー
-  - `test/.../skyscanner_scraper_tests.clj`: URL生成、`detect-bot-challenge` 境界値テスト、満席/ロゴ画像/乗継数パース
+  - `test/.../google_flights_scraper_tests.clj`: URL生成、満席/表記揺れパース、抽出ヘルパー、nilページ安全テスト
+  - `test/.../skyscanner_scraper_tests.clj`: URL生成、`detect-bot-challenge` 境界値テスト、満席/ロゴ画像/乗継数パース、nilページ安全テスト
   - `test/.../scraping_worker_tests.clj`: ヘッドレス判定合成、ブラウザ起動ライフサイクル保護
-- [ ] **Step 3-②: 実装 (Green)**
+- [x] **Step 3-②: 実装 (Green)**
   - `scraper_common.clj`: `ensure-playwright-browsers-installed!`, `create-context-async`, ロッククリーンアップの実装
   - `google_flights_scraper.clj`: DOMポーリング (`loop/recur`)、キャプチャ、セレクタテキスト抽出の実装
   - `skyscanner_scraper.clj`: ウォームアップ、`detect-bot-challenge`、Bot長押し、DOM抽出の実装
   - `scraping_worker.clj`: Playwright 生成、コンテキスト/ページ連携、リソース完全破棄の実装
-- [ ] **Step 3-③: 全テスト実行 & カバレッジレポート出力**
-  - `./scripts/test.ps1` を実行し、全テスト通過 (✔) およびカバレッジ 80% 以上を確認。
-- [ ] **Step 3-④: サブエージェント実装レビュー**
-  - 実装品質・リソースリーク防止・例外安全性のレビュー。
+- [x] **Step 3-③: 全テスト実行 & カバレッジレポート出力**
+  - `./scripts/test.ps1` を実行し、全テスト通過 (✔ 全22スイート、540アサーション ALL PASS) およびカバレッジ 94.9% (目標 80% 大幅超過) を確認。
+- [x] **Step 3-④: サブエージェント実装レビュー**
+  - 実装品質・リソースリーク防止・元リポジトリ準拠性レビュー実施（判定: LGTM / 合意推奨）。
 - [ ] **Step 3-⑤: ユーザー最終確認・合意 (合意3回目)**
 
 ### Phase 4: ドキュメント同期 & コミット & プッシュ (Step 4)

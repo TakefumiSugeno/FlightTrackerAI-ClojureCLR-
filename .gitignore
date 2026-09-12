@@ -42,6 +42,7 @@ doc/work/*.db*
 !doc/work/TestResults/
 !doc/work/CoverageReport/
 *.cobertura.xml
+doc/work/screenshots/
 
 # Environment variables
 .env

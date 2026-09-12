@@ -462,16 +462,18 @@ Playwright による実ブラウザ自動操作は、元リポジトリ（F#版�
 
 1. **非同期タスク同期 (`await-task`)**:
    ```clojure
-   (defn await-task [^Task task]
+   (defn await-task [task]  ;; 型ヒントなし — DLR動的ディスパッチで Task<T> の結果を正しく取得
      (when task
        (.GetResult (.GetAwaiter (.ConfigureAwait task false)))))
    ```
+   > **⚠ ClojureCLR DLR 制約**: `^Task` 型ヒントを付けると非ジェネリック `Task` にバインドされ、`Task<T>` の結果値が `nil` にドロップされる。型ヒントなしの動的ディスパッチが必須。
 2. **多重起動・排他ロック (`scraper-lock`)**:
    - `SemaphoreSlim(1, 1)` によるプロセス内スレッド排他制御。
    - `with-scraper-lock` マクロによる確実な解放。
 3. **Chromium 自動プロビジョニング (`ensure-playwright-browsers-installed!`)**:
    - `(defonce ^:private browser-installed-state (atom :uninstalled))`
-   - 初回呼び出し時に `Microsoft.Playwright.Program/Main` を引数 `(into-array String ["install" "chromium"])` で実行。
+   - **パッケージ管理方式（推奨）**: `FlightTrackerAI.Infrastructure.csproj` 内の `InstallPlaywrightBrowsers` MSBuild ターゲット（`dotnet build` 時に `playwright install chromium` を自動実行）および `dotnet-tools.json` の `microsoft.playwright.cli` により、ビルド段階でブラウザバイナリを確保。
+   - **ランタイムフォールバック**: 環境変数 `PLAYWRIGHT_AUTO_INSTALL=true` が設定されている場合のみ、`Microsoft.Playwright.Program/Main` を引数 `(into-array String ["install" "chromium"])` で実行。
    - 状態を `:installing` ➔ `:installed` (または `:failed`) へ遷移させ、失敗時はクールダウン時間を設けて連続失敗・無駄なネットワーク試行を防止。
 4. **ブラウザ永続コンテキスト生成 (`create-context-async`)**:
    - 保存先: `doc/work/browser_profile/`
@@ -567,13 +569,14 @@ Playwright による実ブラウザ自動操作は、元リポジトリ（F#版�
    - `context.NewPageAsync()` によるページ生成。
    - Google Flights / Skyscanner の巡回実行、結果保存（`flight_snapshots`, `task_run_logs`）、最安値判定、Webhook 通知。
    - `finally` 節における確実なリソース破棄:
-     ```clojure
-     (try
-       (scraper-common/await-task (.CloseAsync page))
-       (catch Exception _ nil))
-     (scraper-common/close-context-async context)
-     (.Dispose playwright)
-     ```
+      ```clojure
+      (try
+        (scraper-common/await-task (.CloseAsync page nil))  ;; ClojureCLR DLR: C#デフォルト引数に nil 明示必須
+        (catch Exception _ nil))
+      (scraper-common/close-context-async context)
+      (when playwright (.Dispose playwright))               ;; nil ガード: Task<T> 戻り値がnilの場合を防御
+      ```
+      > **⚠ ClojureCLR DLR 制約**: `.CloseAsync`, `.ClickAsync`, `.MoveAsync`, `.DownAsync`, `.UpAsync`, `.AddInitScriptAsync` 等の Playwright メソッドは C# のオプション引数を持つが、ClojureCLR の DLR はデフォルト値を自動補完しない。各メソッド呼び出しに明示的に `nil` を渡す必要がある（例: `(.CloseAsync page nil)`, `(.ClickAsync el nil)`）。
 
 ### 6.5 テスト容易性とアーキテクチャ分離規約
 
