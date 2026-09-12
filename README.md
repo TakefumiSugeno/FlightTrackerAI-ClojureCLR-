@@ -93,9 +93,9 @@ OPENROUTER_API_KEY=sk-or-v1-your-openrouter-api-key-here
 実行後、以下の2つの HTML レポートが自動生成されます:
 
 1. **テストケース合否レポート (OK/NG一覧)**:
-   - [doc/work/TestResults/TestResults.html](doc/work/TestResults/TestResults.html) (22スイート、451アサーション全件合格)
+   - [doc/work/TestResults/latest/TestResults.html](doc/work/TestResults/latest/TestResults.html) (22スイート、541アサーション全件合格、実行履歴は `doc/work/TestResults/YYYYMMDD-HHMMSS/`)
 2. **コードカバレッジレポート (網羅率%)**:
-   - [doc/work/CoverageReport/index.html](doc/work/CoverageReport/index.html) (カバレッジ 94.9% 達成)
+   - [doc/work/TestResults/latest/CoverageReport.html](doc/work/TestResults/latest/CoverageReport.html) (カバレッジ 94.9% 達成)
 
 ---
 

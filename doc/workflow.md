@@ -70,8 +70,8 @@
 - テスト先行 (Test First) で実装する。
 - **コードおよび各種ドキュメント（.md, UIモック等）のファイルを作成・更新した直後は、必ずプロジェクト定義の自動フォーマット処理を実行する。**
 - テスト実行時には、必ず **以下2つのHTML視覚レポートを出力・確認** すること（実行コマンド: `./scripts/test.ps1`）。
-  1.  **テストケース合否レポート (OK/NG一覧)**: `doc/work/TestResults/TestResults.html`
-  2.  **コードカバレッジレポート (網羅率%)**: `doc/work/CoverageReport/index.html`（目標カバレッジ 80% 以上）
+  1.  **テストケース合否レポート (OK/NG一覧)**: `doc/work/TestResults/latest/TestResults.html` (各実行履歴: `doc/work/TestResults/YYYYMMDD-HHMMSS/`)
+  2.  **コードカバレッジレポート (網羅率%)**: `doc/work/TestResults/latest/CoverageReport.html`（目標カバレッジ 80% 以上）
 - **タスク実行完了後、成果物を commit する (ブランチ: `alpha`)**。
 
 ### ② サブエージェントによる成果物レビュー

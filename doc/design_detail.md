@@ -593,7 +593,7 @@ Playwright による実ブラウザ自動操作は、元リポジトリ（F#版�
 
 `clojure.test` の全テストスイートを実行し、以下の 2 つの視覚的 HTML レポートを生成します:
 
-1. **テストケース合否レポート (`doc/work/TestResults/TestResults.html`)**:
-   - 各テストケース名、OK(✔)/NG(❌)、所要時間、アサーション差分、スタックトレースを明示。
-2. **コードカバレッジレポート (`doc/work/CoverageReport/index.html`)**:
-   - 各モジュール・公開関数の実行カバレッジ（網羅率%）、未実行・実行済みコードを可視化（目標 80% 以上）。
+1. **テストケース合否レポート (`doc/work/TestResults/latest/TestResults.html`)**:
+   - 各テストケース名、OK(✔)/NG(❌)、所要時間、アサーション差分、スタックトレースを明示（実行ごとの履歴は `doc/work/TestResults/YYYYMMDD-HHMMSS/` に保持）。
+2. **コードカバレッジレポート (`doc/work/TestResults/latest/CoverageReport.html`)**:
+   - 各モジュール・公開関数の実行カバレッジ（網羅率%）、未実行・実行済みコードを可視化（目標 80% 以上）。両レポート間は相互リンクで即座に遷移可能。

@@ -61,9 +61,9 @@
 ### テスト実行とレポート出力規約 (合否一覧 & カバレッジレポート)
 
 - テスト実行時は、単にコンソールで合否判定を行うだけでなく、必ず **以下2つのHTML視覚レポートを出力・確認** すること。
-  1. **テストケース合否レポート (OK/NG一覧)**: `doc/work/TestResults/TestResults.html`
+  1. **テストケース合否レポート (OK/NG一覧)**: `doc/work/TestResults/latest/TestResults.html` (各実行履歴: `doc/work/TestResults/YYYYMMDD-HHMMSS/`)
      - 全テストケース名、OK(✔)/NG(❌)、所要時間、失敗時の期待値・実際値差分およびスタックトレースを明示。
-  2. **コードカバレッジレポート (網羅率%)**: `doc/work/CoverageReport/index.html`
+  2. **コードカバレッジレポート (網羅率%)**: `doc/work/TestResults/latest/CoverageReport.html`
      - 全体およびファイルごとの行・ブランチ網羅率、実行行(緑)/未実行行(赤)のソースコード可視化。
 - **標準実行コマンド**: `./scripts/test.ps1`
 - **目標カバレッジ**: デフォルト 80% 以上を維持し、未達の場合はテストケース（境界値・異常系）を追加すること。
