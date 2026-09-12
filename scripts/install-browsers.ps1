@@ -4,8 +4,8 @@ $ErrorActionPreference = "Stop"
 $rootDir = Split-Path -Parent $PSScriptRoot
 Write-Host "Playwright Chromium ブラウザバイナリをインストールしています..." -ForegroundColor Cyan
 
-dotnet build (Join-Path $rootDir "src/FlightTrackerAI.Web/FlightTrackerAI.Web.fsproj")
-$playwrightScript = Join-Path $rootDir "src/FlightTrackerAI.Web/bin/Debug/net10.0/playwright.ps1"
+dotnet build (Join-Path $rootDir "src/FlightTrackerAI.Infrastructure/FlightTrackerAI.Infrastructure.csproj")
+$playwrightScript = Join-Path $rootDir "src/FlightTrackerAI.Infrastructure/bin/Debug/net10.0/playwright.ps1"
 
 if (Test-Path $playwrightScript) {
     pwsh $playwrightScript install chromium

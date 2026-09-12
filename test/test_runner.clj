@@ -1,3 +1,16 @@
+;; 全依存アセンブリ (Microsoft.Playwright.dll 等) のプリロード
+(let [curr (System.IO.Directory/GetCurrentDirectory)
+      base (.. System.AppDomain -CurrentDomain -BaseDirectory)
+      combine (fn [& parts] (System.IO.Path/Combine (into-array String (map str parts))))
+      candidates [(combine curr "src" "FlightTrackerAI.Infrastructure" "bin" "Debug" "net10.0")
+                  (combine base "src" "FlightTrackerAI.Infrastructure" "bin" "Debug" "net10.0")
+                  (combine base "..")
+                  base]]
+  (doseq [dir candidates]
+    (when (System.IO.Directory/Exists dir)
+      (doseq [dll (System.IO.Directory/GetFiles dir "*.dll")]
+        (try (System.Reflection.Assembly/LoadFrom dll) (catch System.Exception _ nil))))))
+
 (ns test-runner
   (:require [clojure.test :as t]
             [clojure.string :as str])
@@ -61,7 +74,12 @@
     :error
     (when @current-test
       (swap! current-test assoc :status :error)
-      (swap! current-test update :messages conj (str "ERROR: " (:message m) " " (pr-str (:actual m)))))
+      (let [actual (:actual m)
+            act-str (cond
+                      (nil? actual) "nil"
+                      (instance? Exception actual) (str (.GetType ^Exception actual) ": " (.Message ^Exception actual) "\n" (.StackTrace ^Exception actual))
+                      :else (try (pr-str actual) (catch Exception e (.Message e))))]
+        (swap! current-test update :messages conj (str "ERROR: " (:message m) " " act-str))))
 
     nil))
 

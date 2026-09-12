@@ -47,4 +47,25 @@
           offer (gf/parse-offer-element task-id run-log-id "https://flights.google.com/test"
                                         "満席" "全日空" "10:35 - 07:15+1"
                                         "22時間40分" "直行便" now)]
-      (is (nil? offer)))))
+      (is (nil? offer))))
+
+  (testing "parse-offer-element handles direct flights and 2 stops"
+    (let [task-id (Guid/NewGuid)
+          run-log-id (Guid/NewGuid)
+          now (DateTimeOffset/UtcNow)
+          direct-offer (gf/parse-offer-element task-id run-log-id "url" "50,000円" "JAL" "10:00-11:00" "1時間" "直行便" now)
+          two-stops-offer (gf/parse-offer-element task-id run-log-id "url" "50,000円" "ANA" "10:00-20:00" "10時間" "2回乗継" now)]
+      (is (= 0 (:stops-count direct-offer)))
+      (is (= 2 (:stops-count two-stops-offer)))))
+
+  (testing "scrape-async handles nil page safely without throwing"
+    (let [task-id (Guid/NewGuid)
+          run-log-id (Guid/NewGuid)
+          hnd (:ok (domain/create-iata-code "HND"))
+          cdg (:ok (domain/create-iata-code "CDG"))
+          task-item {:id task-id
+                     :origin hnd
+                     :destination cdg
+                     :trip-type {:kind :one-way :outbound (DateOnly. 2026 6 1)}}
+          res (gf/scrape-async nil task-item run-log-id)]
+      (is (= [] res)))))

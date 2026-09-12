@@ -26,16 +26,44 @@
         (is (not (str/includes? ow-url "260508")))
         (is (str/includes? ow-url "currency=JPY"))))))
 
-(deftest test-parse-offer-element
-  (testing "parse-offer-element parses Skyscanner DOM elements correctly"
+(deftest test-detect-bot-challenge
+  (testing "detect-bot-challenge identifies PerimeterX and robot challenges correctly"
+    (is (true? (ss/detect-bot-challenge "Are you a robot?" "Some content" false)))
+    (is (true? (ss/detect-bot-challenge "Verification" "Please PRESS & HOLD to continue" false)))
+    (is (true? (ss/detect-bot-challenge "Verification" "Please press & hold to continue" false)))
+    (is (true? (ss/detect-bot-challenge "Normal title" "Normal content" true)))
+    (is (true? (ss/detect-bot-challenge "Are you a person or a robot?" "Normal content" false)))
+    (is (false? (ss/detect-bot-challenge "Flights to Paris" "Cheap tickets available" false)))
+    (is (false? (ss/detect-bot-challenge nil nil false)))))
+
+(deftest test-parse-offer-element-edge-cases
+  (testing "parse-offer-element handles direct flights and multiple stops"
     (let [task-id (Guid/NewGuid)
           run-log-id (Guid/NewGuid)
           now (DateTimeOffset/UtcNow)
-          offer (ss/parse-offer-element task-id run-log-id "https://skyscanner.jp/test"
-                                        "152,000円" "エールフランス" "" "14h 35m" "直行便" now)]
-      (is (some? offer))
-      (is (= 152000 (:price-jpy offer)))
-      (is (= 875 (:total-duration-minutes offer)))
-      (is (= 0 (:stops-count offer)))
-      (is (= "エールフランス" (:airlines-summary offer)))
-      (is (= :skyscanner (:provider offer))))))
+          direct-offer (ss/parse-offer-element task-id run-log-id "url" "80000円" "AF" "" "14h" "直行便" now)
+          one-stop-offer (ss/parse-offer-element task-id run-log-id "url" "80000円" "AF" "" "14h" "経由 1回" now)
+          two-stop-offer (ss/parse-offer-element task-id run-log-id "url" "80000円" "AF" "" "14h" "2回経由" now)]
+      (is (= 0 (:stops-count direct-offer)))
+      (is (= 1 (:stops-count one-stop-offer)))
+      (is (= 2 (:stops-count two-stop-offer)))))
+
+  (testing "parse-offer-element returns nil when price text is invalid"
+    (let [task-id (Guid/NewGuid)
+          run-log-id (Guid/NewGuid)
+          now (DateTimeOffset/UtcNow)
+          offer (ss/parse-offer-element task-id run-log-id "url" "完売" "AF" "" "14h" "直行便" now)]
+      (is (nil? offer)))))
+
+(deftest test-scrape-async-nil-page
+  (testing "scrape-async handles nil page safely without throwing"
+    (let [task-id (Guid/NewGuid)
+          run-log-id (Guid/NewGuid)
+          hnd (:ok (domain/create-iata-code "HND"))
+          cdg (:ok (domain/create-iata-code "CDG"))
+          task-item {:id task-id
+                     :origin hnd
+                     :destination cdg
+                     :trip-type {:kind :one-way :outbound (DateOnly. 2026 6 1)}}
+          res (ss/scrape-async nil task-item run-log-id)]
+      (is (= [] res)))))

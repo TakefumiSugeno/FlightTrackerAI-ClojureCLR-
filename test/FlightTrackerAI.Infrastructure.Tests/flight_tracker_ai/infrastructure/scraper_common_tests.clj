@@ -29,6 +29,12 @@
       (is (some? dir))
       (is (Directory/Exists dir)))))
 
+(deftest test-get-screenshot-dir
+  (testing "get-screenshot-dir returns existing directory path"
+    (let [dir (scraper-common/get-screenshot-dir)]
+      (is (some? dir))
+      (is (Directory/Exists dir)))))
+
 (deftest test-close-context-async-null-safe
   (testing "close-context-async handles nil context safely without throwing"
     (scraper-common/close-context-async nil)
@@ -51,4 +57,38 @@
       @f1
       @f2
       (is (= [:start-1 :end-1 :start-2 :end-2] @log)))))
+
+(deftest test-cleanup-singleton-locks
+  (testing "cleanup-singleton-locks! removes dangling lock files safely"
+    (let [profile-dir (scraper-common/get-browser-profile-dir)
+          lock-file (System.IO.Path/Combine profile-dir "SingletonLock")
+          cookie-file (System.IO.Path/Combine profile-dir "SingletonCookie")]
+      (System.IO.File/WriteAllText lock-file "dummy-lock")
+      (System.IO.File/WriteAllText cookie-file "dummy-cookie")
+      (is (System.IO.File/Exists lock-file))
+      (scraper-common/cleanup-singleton-locks! profile-dir)
+      (is (not (System.IO.File/Exists lock-file)))
+      (is (not (System.IO.File/Exists cookie-file))))))
+
+(defn- make-completed-task-result [val]
+  (let [m (first (filter #(= (.Name %) "FromResult") (.GetMethods System.Threading.Tasks.Task)))
+        gm (.MakeGenericMethod m (into-array System.Type [(.GetType val)]))]
+    (.Invoke gm nil (into-array Object [val]))))
+
+(deftest test-await-task-null-safe
+  (testing "await-task returns nil when given nil task"
+    (is (nil? (scraper-common/await-task nil))))
+  (testing "await-task resolves completed task correctly"
+    (let [task System.Threading.Tasks.Task/CompletedTask]
+      (scraper-common/await-task task)
+      (is true)))
+  (testing "await-task resolves generic Task<T> result value correctly without dropping to nil"
+    (let [task (make-completed-task-result "test-val")]
+      (is (= "test-val" (scraper-common/await-task task))))))
+
+(deftest test-browser-installed-state
+  (testing "ensure-playwright-browsers-installed! does not throw and manages state"
+    (scraper-common/ensure-playwright-browsers-installed!)
+    (is (contains? #{:installed :installing :uninstalled :failed}
+                   @scraper-common/browser-installed-state))))
 

@@ -86,3 +86,49 @@
         (let [updated (task-repo/get-task-by-id conn-str task-id)]
           (is (some? updated))
           (is (= :completed (:status updated))))))))
+
+(deftest test-effective-headless-resolution
+  (testing "effective headless requires both task is-headless and settings headless-mode"
+    (is (true? (worker/get-effective-headless {:is-headless true} {:headless-mode true})))
+    (is (false? (worker/get-effective-headless {:is-headless false} {:headless-mode true})))
+    (is (false? (worker/get-effective-headless {:is-headless true} {:headless-mode false})))
+    (is (false? (worker/get-effective-headless {:is-headless false} {:headless-mode false})))))
+
+(deftest test-execute-task-scraping-both-providers-disabled
+  (testing "execute-task-scraping skips scraping when both GF and SS are disabled"
+    (let [conn-str (create-test-db)
+          hnd (:ok (domain/create-iata-code "HND"))
+          cdg (:ok (domain/create-iata-code "CDG"))
+          task-id (Guid/NewGuid)
+          now (DateTimeOffset/UtcNow)
+          task-item {:id task-id
+                     :title "未来タスク"
+                     :origin hnd
+                     :destination cdg
+                     :trip-type {:kind :one-way :outbound (.AddDays (DateOnly/FromDateTime (.DateTime now)) 30)}
+                     :max-stops :any-stops
+                     :preferred-airlines []
+                     :target-price-jpy nil
+                     :check-interval-hours 12
+                     :notification-webhook-url nil
+                     :user-notes nil
+                     :is-headless true
+                     :status :active
+                     :consecutive-failures 0
+                     :created-at now
+                     :updated-at now
+                     :last-checked-at nil
+                     :last-lowest-price-jpy nil
+                     :last-lowest-airlines nil
+                     :last-lowest-provider nil
+                     :ai-analysis-summary nil}]
+      (task-repo/create-task conn-str task-item)
+      (let [settings {:default-check-interval-hours 12
+                      :default-webhook-url nil
+                      :openrouter-api-key nil
+                      :enable-google-flights false
+                      :enable-skyscanner false
+                      :headless-mode true}
+            http-client (HttpClient.)
+            res (worker/execute-task-scraping http-client conn-str task-item settings)]
+        (is (= {:ok nil} res))))))
