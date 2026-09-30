@@ -1,4 +1,5 @@
 (ns flight-tracker-ai.core.domain
+  (:require [clojure.string :as str])
   (:import [System Char String Guid DateTimeOffset DateOnly]))
 
 ;; -------------------------------------------------------------
@@ -132,7 +133,12 @@
         clean-flight (if (or (nil? flight-number) (String/IsNullOrWhiteSpace (str flight-number)))
                        "Unknown"
                        (.Trim (str flight-number)))
-        clean-date (str (or outbound-date "unknown-date"))]
+        clean-date (cond
+                     (nil? outbound-date) "unknown-date"
+                     (instance? DateOnly outbound-date) (.ToString ^DateOnly outbound-date "yyyy-MM-dd")
+                     (instance? DateTimeOffset outbound-date) (.ToString ^DateTimeOffset outbound-date "yyyy-MM-dd")
+                     :else (let [s (.Trim (str outbound-date))]
+                             (if (str/blank? s) "unknown-date" s)))]
     (str clean-task "_" clean-flight "_" clean-date)))
 
 ;; -------------------------------------------------------------

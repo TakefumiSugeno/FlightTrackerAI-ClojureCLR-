@@ -158,3 +158,52 @@
 
 - **LGTM**: true
 - **次のアクション**: Task 2.1（Google Flights スクレイパーのオフライン単体テスト作成・Red確認）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-2.1
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 2.1 `google_flights_scraper_tests.clj` に実DOM HTMLサンプル（`doc/work/GoogleFlightサンプル/`）に基づくオフライン単体テスト（`li.pIav2d` からの価格パース、時刻誤認防止、`itinerary` からの便名抽出、`flight_key` 算出）を追加し、テスト失敗を確認する (Red)
+- **レビュアー**: QA Agent
+- **対象成果物**: `test/FlightTrackerAI.Infrastructure.Tests/flight_tracker_ai/infrastructure/google_flights_scraper_tests.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                   | 判定 | コメント                                                                                                                                  |
+| --- | ------------------------------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 仕様書の期待値がテストケースとしてコード化されているか | ✅   | `itinerary` からの便名抽出（直行便・乗継便）、正規表現による価格パースと時刻誤認防止、`flight_key` 算出、実HTMLファイル解析のテストを追加 |
+| 2   | 正常系・異常系・境界値が考慮されているか               | ✅   | 時刻文字列（`8:50 – 15:15` や `12:50発 17:30着`）、空値・nilに対するガード、800万円台誤認が発生しないことを検証                           |
+| 3   | TDD Red状態が確認できているか                          | ✅   | `No such var: gf/parse-flight-number-from-itinerary` によるコンパイル失敗・Red状態を確認                                                  |
+| 4   | ソースとテストの 1:1 対応が維持されているか            | ✅   | `google_flights_scraper.clj` ⇔ `google_flights_scraper_tests.clj` に準拠                                                                  |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 2.2（`google_flights_scraper.clj` への価格パース・便名抽出・オファー生成ロジック実装とGreen化）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-2.2
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 2.2 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj` に価格パース正規表現、便名抽出、オファー生成ロジックを実装し、単体テストを通す (Green)
+- **レビュアー**: PG Agent
+- **対象成果物**: `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj`, `src/FlightTrackerAI.Core/flight_tracker_ai/core/domain.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                 | 判定 | コメント                                                                                                                                 |
+| --- | ---------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 設計書（`design.md`）および仕様書との整合性          | ✅   | `parse-flight-number-from-itinerary`, `parse-google-flights-price`, `extract-cards-from-html`, `flight-key` 生成が設計通り実装されている |
+| 2   | コード品質・可読性・命名・DRY・ClojureCLR イディオム | ✅   | マルチアリティ `parse-offer-element` による後方互換性維持、正規表現の明確化、ロケール非依存の ISO 日付フォーマット適用                   |
+| 3   | 境界値・異常系・エラー処理の網羅                     | ✅   | 時刻混在テキスト（`8:50 – 15:15` 等）での価格誤認防止、nil・空文字セーフ、異常値（800万円台等）の防止が検証済み                          |
+| 4   | ソースとテストの 1:1 対応命名規約遵守                | ✅   | `google_flights_scraper.clj` ⇔ `google_flights_scraper_tests.clj` に準拠                                                                 |
+| 5   | テスト通過（Green）の確認                            | ✅   | 全 22 テストスイート、617 アサーションが通過（Failure 0, Error 0）                                                                       |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 2.3（Playwright 2段階検索のモック/結合テスト作成・Red確認）へ着手

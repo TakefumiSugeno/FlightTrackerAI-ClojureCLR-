@@ -69,3 +69,56 @@
                      :trip-type {:kind :one-way :outbound (DateOnly. 2026 6 1)}}
           res (gf/scrape-async nil task-item run-log-id)]
       (is (= [] res)))))
+
+(deftest test-parse-flight-number-from-itinerary
+  (testing "parse-flight-number-from-itinerary extracts flight numbers correctly"
+    (is (= "5J 5055" (gf/parse-flight-number-from-itinerary "itinerary=NRT-MNL-5J-5055-20270227")))
+    (is (= "5J 5055" (gf/parse-flight-number-from-itinerary "NRT-MNL-5J-5055-20270227")))
+    (is (= "NH 869" (gf/parse-flight-number-from-itinerary "HND-MNL-NH-869-20270227")))
+    (is (= "5J 5065 ➔ 5J 2516" (gf/parse-flight-number-from-itinerary "NRT-CEB-5J-5065-20270227,CEB-MNL-5J-2516-20270228")))
+    (is (nil? (gf/parse-flight-number-from-itinerary "")))
+    (is (nil? (gf/parse-flight-number-from-itinerary nil)))))
+
+(deftest test-parse-google-flights-price-avoids-time-strings
+  (testing "parse-google-flights-price accurately extracts prices and ignores time representations"
+    ;; Real Google Flights strings with times and prices
+    (let [sample-label "往復の合計金額 34527 円～。 セブパシフィック航空 が運航する直行便。 土曜日, 2月 27 12:50 成田国際空港発、土曜日, 2月 27 17:30 Ninoy Aquino International Airport着。 合計時間 5時間 40分。   フライトを選択"]
+      (is (= 34527 (gf/parse-google-flights-price sample-label))))
+    (is (= 148200 (gf/parse-google-flights-price "￥148,200")))
+    (is (= 48200 (gf/parse-google-flights-price "48,200 円")))
+    (is (= 34144 (gf/parse-google-flights-price "34144 円")))
+    ;; Time strings must NOT be mistaken for prices!
+    (is (nil? (gf/parse-google-flights-price "8:50 – 15:15")))
+    (is (nil? (gf/parse-google-flights-price "12:50発 17:30着")))
+    (is (nil? (gf/parse-google-flights-price "5時間 40分")))
+    (is (nil? (gf/parse-google-flights-price "満席")))))
+
+(deftest test-parse-offer-element-with-flight-key
+  (testing "parse-offer-element creates offer containing flight-number and flight-key"
+    (let [task-id (Guid/NewGuid)
+          run-log-id (Guid/NewGuid)
+          now (DateTimeOffset/UtcNow)
+          outbound (DateOnly. 2027 2 27)
+          itinerary "NRT-MNL-5J-5055-20270227"
+          price-text "往復の合計金額 34527 円～"
+          offer (gf/parse-offer-element task-id run-log-id "https://flights.google.com/test"
+                                        price-text "セブパシフィック航空" "12:50 - 17:30"
+                                        "5時間40分" "直行便" itinerary outbound now)]
+      (is (some? offer))
+      (is (= 34527 (:price-jpy offer)))
+      (is (= "5J 5055" (:flight-number offer)))
+      (is (= (str task-id "_5J 5055_2027-02-27") (:flight-key offer)))
+      (is (= "5J 5055" (:flight-number (first (:segments offer))))))))
+
+(deftest test-offline-sample-html-card-extraction
+  (testing "offline sample HTML parses flight card data without anomalies"
+    (let [sample-path "doc/work/GoogleFlightサンプル/東京都発シティ・オブ・マニラ行き _ Google フライト.html"]
+      (when (System.IO.File/Exists sample-path)
+        (let [html (System.IO.File/ReadAllText sample-path)
+              cards (gf/extract-cards-from-html html)]
+          (is (pos? (count cards)))
+          (let [first-card (first cards)]
+            (is (= 34527 (:price-jpy first-card)))
+            (is (= "5J 5055" (:flight-number first-card)))
+            (is (not= 8501515 (:price-jpy first-card)))
+            (is (< (:price-jpy first-card) 500000))))))))

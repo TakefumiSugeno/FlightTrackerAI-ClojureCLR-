@@ -36,42 +36,94 @@
         (str "https://www.google.com/travel/flights?q=Flights%20to%20" dest-str
              "%20from%20" origin-str "%20on%20" ob-date "&hl=ja&curr=JPY")))))
 
+(defn parse-flight-number-from-itinerary [itinerary-str]
+  (when-not (str/blank? itinerary-str)
+    (let [cleaned (if (.StartsWith (str itinerary-str) "itinerary=")
+                    (subs (str itinerary-str) 10)
+                    (str itinerary-str))
+          parts (str/split cleaned #",")
+          flight-nums (keep (fn [p]
+                              (let [tokens (str/split (.Trim (str p)) #"-")]
+                                (when (>= (count tokens) 4)
+                                  (str (nth tokens 2) " " (nth tokens 3)))))
+                            parts)]
+      (when (seq flight-nums)
+        (str/join " ➔ " flight-nums)))))
+
+(defn parse-google-flights-price [text]
+  (when-not (str/blank? text)
+    (let [s (str text)]
+      (if-let [m (re-find #"(\d[\d,]*)\s*円" s)]
+        (let [num-str (str/replace (second m) "," "")]
+          (try (Int64/Parse num-str) (catch Exception _ nil)))
+        (if-let [m2 (re-find #"[￥¥](\d[\d,]*)" s)]
+          (let [num-str (str/replace (second m2) "," "")]
+            (try (Int64/Parse num-str) (catch Exception _ nil)))
+          nil)))))
+
 (defn parse-offer-element
-  [^Guid task-id ^Guid run-log-id ^String booking-url price-text airlines-text times-text duration-text stops-text ^DateTimeOffset captured-at]
-  (if-let [price (scraper-common/parse-price-jpy price-text)]
-    (let [total-duration (scraper-common/parse-duration-minutes duration-text)
-          stops-str (str stops-text)
-          stops-count (cond
-                        (or (.Contains stops-str "直行") (.Contains stops-str "0")) 0
-                        (.Contains stops-str "1") 1
-                        (.Contains stops-str "2") 2
-                        :else 1)
-          airlines-summary (.Trim (str airlines-text))
-          segment {:leg-index 0
-                   :segment-index 0
-                   :departure-airport ""
-                   :arrival-airport ""
-                   :marketing-airline airlines-summary
-                   :operating-airline nil
-                   :flight-number nil
-                   :departure-time captured-at
-                   :arrival-time (.AddMinutes captured-at (double total-duration))
-                   :flight-duration-minutes total-duration
-                   :layover-minutes-next nil}]
-      {:id (Guid/NewGuid)
-       :task-id task-id
-       :run-log-id run-log-id
-       :provider :google-flights
-       :airlines-summary airlines-summary
-       :departure-time captured-at
-       :arrival-time (.AddMinutes captured-at (double total-duration))
-       :total-duration-minutes total-duration
-       :stops-count stops-count
-       :segments [segment]
-       :price-jpy price
-       :booking-url booking-url
-       :captured-at captured-at})
-    nil))
+  ([^Guid task-id ^Guid run-log-id ^String booking-url price-text airlines-text times-text duration-text stops-text ^DateTimeOffset captured-at]
+   (parse-offer-element task-id run-log-id booking-url price-text airlines-text times-text duration-text stops-text nil nil captured-at))
+  ([^Guid task-id ^Guid run-log-id ^String booking-url price-text airlines-text times-text duration-text stops-text itinerary-or-flight-no outbound-date ^DateTimeOffset captured-at]
+   (if-let [price (or (parse-google-flights-price price-text)
+                      (scraper-common/parse-price-jpy price-text))]
+     (let [total-duration (scraper-common/parse-duration-minutes duration-text)
+           stops-str (str stops-text)
+           stops-count (cond
+                         (or (.Contains stops-str "直行") (.Contains stops-str "0")) 0
+                         (.Contains stops-str "1") 1
+                         (.Contains stops-str "2") 2
+                         :else 1)
+           airlines-summary (.Trim (str airlines-text))
+           flight-number (when-not (str/blank? itinerary-or-flight-no)
+                           (if (or (.Contains (str itinerary-or-flight-no) "-")
+                                   (.StartsWith (str itinerary-or-flight-no) "itinerary="))
+                             (parse-flight-number-from-itinerary itinerary-or-flight-no)
+                             (str itinerary-or-flight-no)))
+           flight-key (when (and task-id flight-number outbound-date)
+                        (domain/build-flight-key task-id flight-number outbound-date))
+           segment {:leg-index 0
+                    :segment-index 0
+                    :departure-airport ""
+                    :arrival-airport ""
+                    :marketing-airline airlines-summary
+                    :operating-airline nil
+                    :flight-number flight-number
+                    :departure-time captured-at
+                    :arrival-time (.AddMinutes captured-at (double total-duration))
+                    :flight-duration-minutes total-duration
+                    :layover-minutes-next nil}]
+       {:id (Guid/NewGuid)
+        :task-id task-id
+        :run-log-id run-log-id
+        :provider :google-flights
+        :flight-number flight-number
+        :flight-key flight-key
+        :airlines-summary airlines-summary
+        :departure-time captured-at
+        :arrival-time (.AddMinutes captured-at (double total-duration))
+        :total-duration-minutes total-duration
+        :stops-count stops-count
+        :segments [segment]
+        :price-jpy price
+        :booking-url booking-url
+        :captured-at captured-at})
+     nil)))
+
+(defn extract-cards-from-html [^String html]
+  (if (str/blank? html)
+    []
+    (let [card-matches (re-seq #"<li[^>]*class=\"[^\"]*pIav2d[^\"]*\"[^>]*>[\s\S]*?</li>" html)]
+      (mapv (fn [card]
+              (let [itin (second (re-find #"itinerary=([^\s\"'&>]+)" card))
+                    fn-str (parse-flight-number-from-itinerary itin)
+                    price-label (second (re-find #"aria-label=\"([^\"]*円[^\"]*)\"" card))
+                    price (or (parse-google-flights-price price-label)
+                              (when-let [p-raw (second (re-find #"(\d[\d,]*)\s*円" card))]
+                                (try (Int64/Parse (str/replace p-raw "," "")) (catch Exception _ nil))))]
+                {:flight-number fn-str
+                 :price-jpy price}))
+            card-matches))))
 
 (defn scrape-async [page task-item ^Guid run-log-id]
   (if-not page
