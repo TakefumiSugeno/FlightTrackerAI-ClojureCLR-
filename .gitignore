@@ -39,9 +39,7 @@ doc/work/*.log
 doc/work/*.db
 doc/work/*.db*
 [Tt]est[Rr]esults/
-!doc/work/TestResults/
-!doc/work/TestResults/latest/
-doc/work/TestResults/20*
+doc/work/TestResults/
 *.cobertura.xml
 doc/work/screenshots/
 doc/work/

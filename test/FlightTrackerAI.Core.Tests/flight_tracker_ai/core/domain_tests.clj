@@ -64,3 +64,42 @@
     (is (false? (domain/target-achieved? {:status :active :target-price-jpy 150000 :last-lowest-price-jpy 152000})))
     (is (false? (domain/target-achieved? {:status :paused :target-price-jpy 150000 :last-lowest-price-jpy 140000})))
     (is (false? (domain/target-achieved? {:status :active :target-price-jpy nil :last-lowest-price-jpy 140000})))))
+
+(deftest test-time-range-conversions
+  (testing "TimeRange from-string and to-string roundtrip correctly"
+    (doseq [[input expected-str expected-kw] [["Any" "Any" :any]
+                                              ["any" "Any" :any]
+                                              ["EarlyMorning" "EarlyMorning" :early-morning]
+                                              ["earlymorning" "EarlyMorning" :early-morning]
+                                              ["early-morning" "EarlyMorning" :early-morning]
+                                              ["Morning" "Morning" :morning]
+                                              ["morning" "Morning" :morning]
+                                              ["Afternoon" "Afternoon" :afternoon]
+                                              ["afternoon" "Afternoon" :afternoon]
+                                              ["Evening" "Evening" :evening]
+                                              ["evening" "Evening" :evening]
+                                              [nil "Any" :any]]]
+      (let [parsed (domain/time-range-from-string input)]
+        (is (= expected-kw parsed))
+        (is (= expected-str (domain/time-range-to-string parsed)))))))
+
+(deftest test-build-flight-key
+  (testing "build-flight-key produces consistent deterministic tracking key"
+    (let [task-id "task-123"
+          flight-no "5J 5055"
+          outbound-date "2026-05-01"
+          key (domain/build-flight-key task-id flight-no outbound-date)]
+      (is (= "task-123_5J 5055_2026-05-01" key)))
+
+    (testing "build-flight-key handles transit multiple flight numbers"
+      (let [key (domain/build-flight-key "task-456" "5J 5065 ➔ 5J 2516" "2026-05-01")]
+        (is (= "task-456_5J 5065 ➔ 5J 2516_2026-05-01" key))))
+
+    (testing "build-flight-key handles nil or empty values gracefully"
+      (let [key (domain/build-flight-key "task-789" nil "2026-05-01")]
+        (is (= "task-789_Unknown_2026-05-01" key))))))
+
+(deftest test-default-system-settings-extension
+  (testing "default-system-settings contains default-max-results-count"
+    (is (= 10 (:default-max-results-count domain/default-system-settings)))))
+

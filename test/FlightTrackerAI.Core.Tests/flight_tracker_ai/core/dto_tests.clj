@@ -14,6 +14,9 @@
                             :outbound (DateOnly. 2026 5 1)
                             :inbound (DateOnly. 2026 5 8)}
                 :max-stops :one-stop
+                :outbound-time-range :morning
+                :inbound-time-range :evening
+                :max-results-count 10
                 :preferred-airlines ["ANA" "AF"]
                 :target-price-jpy 160000
                 :check-interval-hours 12
@@ -27,6 +30,7 @@
                 :last-checked-at (DateTimeOffset. 2026 8 29 14 0 0 (TimeSpan/FromHours 9.0))
                 :last-lowest-price-jpy 148200
                 :last-lowest-airlines "ANA + SQ / 復: AF"
+                :last-lowest-flight-number "NH841 ➔ AF275"
                 :last-lowest-provider :google-flights
                 :ai-analysis-summary "現在最安値圏内です"}
           row (dto/task->row task)]
@@ -35,6 +39,10 @@
       (is (= "RoundTrip" (:trip_type row)))
       (is (= "2026-05-01" (:outbound_date row)))
       (is (= "2026-05-08" (:inbound_date row)))
+      (is (= "Morning" (:outbound_time_range row)))
+      (is (= "Evening" (:inbound_time_range row)))
+      (is (= 10 (:max_results_count row)))
+      (is (= "NH841 ➔ AF275" (:last_lowest_flight_number row)))
       (is (= 148200 (:last_lowest_price_jpy row)))
       (is (= "GoogleFlights" (:last_lowest_provider row)))
       (is (= "羽田発着希望、預け荷物あり" (:user_notes row)))
@@ -48,6 +56,10 @@
           (is (= "HND" (:origin restored)))
           (is (= "CDG" (:destination restored)))
           (is (= (:max-stops task) (:max-stops restored)))
+          (is (= :morning (:outbound-time-range restored)))
+          (is (= :evening (:inbound-time-range restored)))
+          (is (= 10 (:max-results-count restored)))
+          (is (= "NH841 ➔ AF275" (:last-lowest-flight-number restored)))
           (is (= ["ANA" "AF"] (:preferred-airlines restored)))
           (is (= 160000 (:target-price-jpy restored)))
           (is (= 12 (:check-interval-hours restored)))
@@ -79,6 +91,8 @@
                  :task-id (Guid/NewGuid)
                  :run-log-id (Guid/NewGuid)
                  :provider :google-flights
+                 :flight-number "NH841"
+                 :flight-key "task-1_NH841_2026-05-01"
                  :airlines-summary "全日空 + シンガポール航空"
                  :departure-time (DateTimeOffset. 2026 5 1 10 35 0 (TimeSpan/FromHours 9.0))
                  :arrival-time (DateTimeOffset. 2026 5 2 7 15 0 (TimeSpan/FromHours 2.0))
@@ -96,17 +110,22 @@
                  :booking-url "https://flights.google.com"
                  :captured-at (DateTimeOffset. 2026 8 29 14 0 0 (TimeSpan/FromHours 9.0))}
           row (dto/offer->row offer)]
+      (is (= "NH841" (:flight_number row)))
+      (is (= "task-1_NH841_2026-05-01" (:flight_key row)))
       (is (.Contains (str (:segments_json row)) "NH841"))
       (let [restored (dto/row->offer row)]
         (is (= (:id offer) (:id restored)))
         (is (= (:price-jpy offer) (:price-jpy restored)))
         (is (= :google-flights (:provider restored)))
+        (is (= "NH841" (:flight-number restored)))
+        (is (= "task-1_NH841_2026-05-01" (:flight-key restored)))
         (is (= 1 (count (:segments restored))))
         (is (= "NH841" (:flight-number (first (:segments restored)))))))))
 
 (deftest test-settings-row-roundtrip
   (testing "settings->row and row->settings roundtrip correctly"
     (let [settings {:default-check-interval-hours 6
+                    :default-max-results-count 15
                     :default-webhook-url "https://discord.com/webhook/test"
                     :openrouter-api-key "sk-or-v1-xxx"
                     :enable-google-flights true
@@ -114,11 +133,13 @@
                     :headless-mode false}
           row (dto/settings->row settings)]
       (is (= 6 (:default_check_interval_hours row)))
+      (is (= 15 (:default_max_results_count row)))
       (is (= 1 (:enable_google_flights row)))
       (is (= 0 (:enable_skyscanner row)))
       (is (= 0 (:headless_mode row)))
       (let [restored (dto/row->settings row)]
         (is (= 6 (:default-check-interval-hours restored)))
+        (is (= 15 (:default-max-results-count restored)))
         (is (= "https://discord.com/webhook/test" (:default-webhook-url restored)))
         (is (= "sk-or-v1-xxx" (:openrouter-api-key restored)))
         (is (true? (:enable-google-flights restored)))

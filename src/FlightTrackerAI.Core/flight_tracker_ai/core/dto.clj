@@ -80,6 +80,9 @@
      :inbound_date inbound-str
      :preferred_airlines (to-json (or (:preferred-airlines task) []))
      :max_stops (domain/max-stops-to-string (:max-stops task))
+     :outbound_time_range (domain/time-range-to-string (:outbound-time-range task))
+     :inbound_time_range (domain/time-range-to-string (:inbound-time-range task))
+     :max_results_count (or (:max-results-count task) 10)
      :target_price_jpy (:target-price-jpy task)
      :check_interval_hours (or (:check-interval-hours task) 12)
      :webhook_url (:notification-webhook-url task)
@@ -93,6 +96,7 @@
      :last_checked_at last-checked-at
      :last_lowest_price_jpy (:last-lowest-price-jpy task)
      :last_lowest_airlines (:last-lowest-airlines task)
+     :last_lowest_flight_number (:last-lowest-flight-number task)
      :last_lowest_provider (when-let [p (:last-lowest-provider task)]
                              (domain/scraping-provider-to-string p))
      :ai_analysis_summary (:ai-analysis-summary task)}))
@@ -121,6 +125,9 @@
                            :outbound-date outbound-date})
               pref-airlines (from-json-array-strings (:preferred_airlines row))
               max-stops (domain/max-stops-from-string (:max_stops row))
+              outbound-time-range (domain/time-range-from-string (:outbound_time_range row))
+              inbound-time-range (domain/time-range-from-string (:inbound_time_range row))
+              max-results-count (long (or (:max_results_count row) 10))
               status (domain/task-status-from-string (:status row) (:error_message row))
               last-checked (when-not (str/blank? (:last_checked_at row))
                              (try (DateTimeOffset/Parse (:last_checked_at row)) (catch Exception _ nil)))
@@ -135,6 +142,9 @@
             :destination (:ok dest-res)
             :trip-type trip-type
             :max-stops max-stops
+            :outbound-time-range outbound-time-range
+            :inbound-time-range inbound-time-range
+            :max-results-count max-results-count
             :preferred-airlines pref-airlines
             :target-price-jpy (when-let [p (:target_price_jpy row)] (long p))
             :check-interval-hours (long (or (:check_interval_hours row) 12))
@@ -148,6 +158,7 @@
             :last-checked-at last-checked
             :last-lowest-price-jpy (when-let [p (:last_lowest_price_jpy row)] (long p))
             :last-lowest-airlines (when-not (str/blank? (:last_lowest_airlines row)) (:last_lowest_airlines row))
+            :last-lowest-flight-number (when-not (str/blank? (:last_lowest_flight_number row)) (:last_lowest_flight_number row))
             :last-lowest-provider last-provider
             :ai-analysis-summary (when-not (str/blank? (:ai_analysis_summary row)) (:ai_analysis_summary row))}})))))
 
@@ -168,6 +179,8 @@
      :task_id (str (:task-id offer))
      :run_log_id (str (:run-log-id offer))
      :provider (domain/scraping-provider-to-string (:provider offer))
+     :flight_number (:flight-number offer)
+     :flight_key (:flight-key offer)
      :airlines_summary (or (:airlines-summary offer) "")
      :departure_time dep-str
      :arrival_time arr-str
@@ -206,6 +219,8 @@
      :task-id (try (Guid/Parse (str (:task_id row))) (catch Exception _ (Guid/NewGuid)))
      :run-log-id (try (Guid/Parse (str (:run_log_id row))) (catch Exception _ (Guid/NewGuid)))
      :provider (domain/scraping-provider-from-string (:provider row))
+     :flight-number (:flight_number row)
+     :flight-key (:flight_key row)
      :airlines-summary (:airlines_summary row)
      :departure-time (try (DateTimeOffset/Parse (:departure_time row)) (catch Exception _ (DateTimeOffset/UtcNow)))
      :arrival-time (try (DateTimeOffset/Parse (:arrival_time row)) (catch Exception _ (DateTimeOffset/UtcNow)))
@@ -222,6 +237,7 @@
 (defn settings->row [settings]
   {:id 1
    :default_check_interval_hours (or (:default-check-interval-hours settings) 12)
+   :default_max_results_count (or (:default-max-results-count settings) 10)
    :default_webhook_url (:default-webhook-url settings)
    :openrouter_api_key (:openrouter-api-key settings)
    :enable_google_flights (if (false? (:enable-google-flights settings)) 0 1)
@@ -231,6 +247,7 @@
 
 (defn row->settings [row]
   {:default-check-interval-hours (long (or (:default_check_interval_hours row) 12))
+   :default-max-results-count (long (or (:default_max_results_count row) 10))
    :default-webhook-url (when-not (str/blank? (:default_webhook_url row)) (:default_webhook_url row))
    :openrouter-api-key (when-not (str/blank? (:openrouter_api_key row)) (:openrouter_api_key row))
    :enable-google-flights (not= (:enable_google_flights row) 0)

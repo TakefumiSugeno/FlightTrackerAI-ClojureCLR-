@@ -60,3 +60,52 @@
 
 - **LGTM**: true
 - **次のアクション**: Propose 合意（L2合意-2）を経て、Apply フェーズの実装（Step 1: ドメイン拡張）へ着手。
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-1.1
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 1.1 `domain_tests.clj` に新規フィールド（`outbound_time_range`, `inbound_time_range`, `max_stops`, `max_results_count`, `flight_number`, `flight_key`）の仕様検証テストを追加し、テスト失敗を確認する (Red)
+- **レビュアー**: QA Agent
+- **対象成果物**: `test/FlightTrackerAI.Core.Tests/flight_tracker_ai/core/domain_tests.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                   | 判定 | コメント                                                                    |
+| --- | ------------------------------------------------------ | ---- | --------------------------------------------------------------------------- |
+| 1   | 仕様書の期待値がテストケースとしてコード化されているか | ✅   | 時間帯レンジ変換、`build-flight-key` 生成、設定拡張のテストを追加           |
+| 2   | 正常系・異常系・境界値が考慮されているか               | ✅   | nil入力時のフォールバック（`Unknown`、`:any`）をテスト網羅                  |
+| 3   | TDD Red状態が確認できているか                          | ✅   | `./scripts/test.ps1` で未定義シンボルによるコンパイル失敗・テスト失敗を確認 |
+| 4   | ソースとテストの 1:1 対応が維持されているか            | ✅   | `domain.clj` ⇔ `domain_tests.clj` に準拠                                    |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 1.2（`domain.clj` への実装・Green化）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-1.2
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 1.2 `src/FlightTrackerAI.Core/flight_tracker_ai/core/domain.clj` および `dto.clj` に `Task`, `FlightOffer`, `SystemSettings` の各レコード・DTOマッピングを拡張し、単体テストを通す (Green/Refactor)
+- **レビュアー**: PG Agent
+- **対象成果物**: `src/FlightTrackerAI.Core/flight_tracker_ai/core/domain.clj`, `src/FlightTrackerAI.Core/flight_tracker_ai/core/dto.clj`, `test/FlightTrackerAI.Core.Tests/flight_tracker_ai/core/dto_tests.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                 | 判定 | コメント                                                                                                 |
+| --- | ---------------------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
+| 1   | 設計書（`design.md`）および仕様書との整合性          | ✅   | `time-range` 変換、`build-flight-key`、`max-results-count` 等が設計通り正確に反映されている              |
+| 2   | コード品質・可読性・命名・DRY・ClojureCLR イディオム | ✅   | Clojureの純粋関数と不変データ構造を活用し、nil安全かつ簡潔に実装されている                               |
+| 3   | 境界値・異常系・エラー処理の網羅                     | ✅   | 文字列変換での未知の値に対する `:any` / `Unknown` フォールバック、数値パースの既定値適用が実装されている |
+| 4   | ソースとテストの 1:1 対応命名規約遵守                | ✅   | `domain.clj` ⇔ `domain_tests.clj`、`dto.clj` ⇔ `dto_tests.clj` が正しく対応                              |
+| 5   | テスト通過（Green）の確認                            | ✅   | 全 22 テストスイート、583 アサーションが通過（Failure 0, Error 0）                                       |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 1.3（DBマイグレーションのテスト作成・Red確認）へ着手

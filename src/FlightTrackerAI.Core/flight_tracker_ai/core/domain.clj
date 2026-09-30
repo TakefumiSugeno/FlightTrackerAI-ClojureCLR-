@@ -40,6 +40,33 @@
         :else :any-stops))))
 
 ;; -------------------------------------------------------------
+;; 2.1 TimeRange (時間帯レンジ)
+;; -------------------------------------------------------------
+(defn time-range-to-string [range-val]
+  (cond
+    (= range-val :early-morning) "EarlyMorning"
+    (= range-val :morning) "Morning"
+    (= range-val :afternoon) "Afternoon"
+    (= range-val :evening) "Evening"
+    (= range-val :any) "Any"
+    (= range-val "EarlyMorning") "EarlyMorning"
+    (= range-val "Morning") "Morning"
+    (= range-val "Afternoon") "Afternoon"
+    (= range-val "Evening") "Evening"
+    :else "Any"))
+
+(defn time-range-from-string [s]
+  (if (nil? s)
+    :any
+    (let [lower (.ToLowerInvariant (.Trim (str s)))]
+      (cond
+        (or (= lower "earlymorning") (= lower "early-morning")) :early-morning
+        (= lower "morning") :morning
+        (= lower "afternoon") :afternoon
+        (= lower "evening") :evening
+        :else :any))))
+
+;; -------------------------------------------------------------
 ;; 3. TaskStatus (タスク状態)
 ;; -------------------------------------------------------------
 (defn task-status-to-string [status]
@@ -98,10 +125,22 @@
          (<= lowest target))))
 
 ;; -------------------------------------------------------------
-;; 6. デフォルト設定
+;; 6. FlightKey (同一航空券追跡キー生成)
+;; -------------------------------------------------------------
+(defn build-flight-key [task-id flight-number outbound-date]
+  (let [clean-task (str (or task-id "unknown-task"))
+        clean-flight (if (or (nil? flight-number) (String/IsNullOrWhiteSpace (str flight-number)))
+                       "Unknown"
+                       (.Trim (str flight-number)))
+        clean-date (str (or outbound-date "unknown-date"))]
+    (str clean-task "_" clean-flight "_" clean-date)))
+
+;; -------------------------------------------------------------
+;; 7. デフォルト設定
 ;; -------------------------------------------------------------
 (def default-system-settings
   {:default-check-interval-hours 12
+   :default-max-results-count 10
    :default-webhook-url nil
    :openrouter-api-key nil
    :enable-google-flights true
