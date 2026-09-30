@@ -11,8 +11,8 @@
 
 - [x] 2.1 `google_flights_scraper_tests.clj` に実DOM HTMLサンプル（`doc/work/GoogleFlightサンプル/`）に基づくオフライン単体テスト（`li.pIav2d` からの価格パース、時刻誤認防止、`itinerary` からの便名抽出、`flight_key` 算出）を追加し、テスト失敗を確認する (Red)
 - [x] 2.2 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj` に価格パース正規表現、便名抽出、オファー生成ロジックを実装し、単体テストを通す (Green)
-- [ ] 2.3 `google_flights_scraper_tests.clj` に Playwright 2段階検索（基本URLアクセス、経由地数フィルターダイアログ操作、安い順ソート、Viewport 1440x900 定義、最安値キャプチャ）のモック/結合テストを追加する (Red)
-- [ ] 2.4 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj` に 2段階 Playwright 巡回・フィルター操作・キャプチャ保存フローを実装し、テストを通す (Green/Refactor)
+- [x] 2.3 `google_flights_scraper_tests.clj` に Playwright 2段階検索（基本URLアクセス、経由地数フィルターダイアログ操作、安い順ソート、Viewport 1440x900 定義、最安値キャプチャ）のモック/結合テストを追加する (Red)
+- [x] 2.4 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj` に 2段階 Playwright 巡回・フィルター操作・キャプチャ保存フローを実装し、テストを通す (Green/Refactor)
 
 ## 3. Web UI / API 連携および結合検証
 

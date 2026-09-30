@@ -65,11 +65,11 @@
           (try
             (set! (.CommandText cmd)
                   "INSERT INTO flight_snapshots (
-                      id, task_id, run_log_id, provider, airlines_summary,
+                      id, task_id, run_log_id, provider, flight_number, flight_key, airlines_summary,
                       departure_time, arrival_time, total_duration_minutes,
                       stops_count, segments_json, price_jpy, booking_url, captured_at
                   ) VALUES (
-                      @Id, @TaskId, @RunLogId, @Provider, @AirlinesSummary,
+                      @Id, @TaskId, @RunLogId, @Provider, @FlightNumber, @FlightKey, @AirlinesSummary,
                       @DepartureTime, @ArrivalTime, @TotalDurationMinutes,
                       @StopsCount, @SegmentsJson, @PriceJpy, @BookingUrl, @CapturedAt
                   );")
@@ -77,6 +77,8 @@
             (add-param cmd "@TaskId" (:task_id row))
             (add-param cmd "@RunLogId" (:run_log_id row))
             (add-param cmd "@Provider" (:provider row))
+            (add-param cmd "@FlightNumber" (:flight_number row))
+            (add-param cmd "@FlightKey" (:flight_key row))
             (add-param cmd "@AirlinesSummary" (:airlines_summary row))
             (add-param cmd "@DepartureTime" (:departure_time row))
             (add-param cmd "@ArrivalTime" (:arrival_time row))
@@ -94,15 +96,17 @@
    :task_id (.GetString reader 1)
    :run_log_id (.GetString reader 2)
    :provider (.GetString reader 3)
-   :airlines_summary (.GetString reader 4)
-   :departure_time (.GetString reader 5)
-   :arrival_time (.GetString reader 6)
-   :total_duration_minutes (.GetInt32 reader 7)
-   :stops_count (.GetInt32 reader 8)
-   :segments_json (.GetString reader 9)
-   :price_jpy (.GetInt32 reader 10)
-   :booking_url (.GetString reader 11)
-   :captured_at (.GetString reader 12)})
+   :flight_number (if (.IsDBNull reader 4) nil (.GetString reader 4))
+   :flight_key (if (.IsDBNull reader 5) nil (.GetString reader 5))
+   :airlines_summary (.GetString reader 6)
+   :departure_time (.GetString reader 7)
+   :arrival_time (.GetString reader 8)
+   :total_duration_minutes (.GetInt32 reader 9)
+   :stops_count (.GetInt32 reader 10)
+   :segments_json (.GetString reader 11)
+   :price_jpy (.GetInt32 reader 12)
+   :booking_url (.GetString reader 13)
+   :captured_at (.GetString reader 14)})
 
 (defn get-latest-offers-for-task [^String connection-string ^Guid task-id limit]
   (with-open [conn (db/create-connection connection-string)]
@@ -110,7 +114,7 @@
       (try
         (set! (.CommandText cmd)
               "SELECT
-                  id, task_id, run_log_id, provider, airlines_summary,
+                  id, task_id, run_log_id, provider, flight_number, flight_key, airlines_summary,
                   departure_time, arrival_time, total_duration_minutes,
                   stops_count, segments_json, price_jpy, booking_url, captured_at
               FROM flight_snapshots

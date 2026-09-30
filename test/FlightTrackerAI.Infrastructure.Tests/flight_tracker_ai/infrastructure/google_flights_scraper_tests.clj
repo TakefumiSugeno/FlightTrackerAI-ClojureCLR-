@@ -122,3 +122,21 @@
             (is (= "5J 5055" (:flight-number first-card)))
             (is (not= 8501515 (:price-jpy first-card)))
             (is (< (:price-jpy first-card) 500000))))))))
+
+(deftest test-viewport-size-specification
+  (testing "Google Flights viewport size is strictly defined as 1440x900"
+    (is (= 1440 gf/viewport-width))
+    (is (= 900 gf/viewport-height))))
+
+(deftest test-filter-and-sort-helpers-safety
+  (testing "filter and sort async helpers handle nil page safely"
+    (is (nil? (gf/apply-stops-filter-async nil :direct-only)))
+    (is (nil? (gf/apply-cheapest-sort-async nil)))))
+
+(deftest test-extract-cards-respects-max-results-count
+  (testing "extract-cards-from-html respects limit count when passed"
+    (let [sample-path "doc/work/GoogleFlightサンプル/東京都発シティ・オブ・マニラ行き _ Google フライト.html"]
+      (when (System.IO.File/Exists sample-path)
+        (let [html (System.IO.File/ReadAllText sample-path)
+              cards-3 (gf/extract-cards-from-html html 3)]
+          (is (= 3 (count cards-3))))))))

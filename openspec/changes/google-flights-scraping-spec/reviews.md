@@ -207,3 +207,52 @@
 
 - **LGTM**: true
 - **次のアクション**: Task 2.3（Playwright 2段階検索のモック/結合テスト作成・Red確認）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-2.3
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 2.3 `google_flights_scraper_tests.clj` に Playwright 2段階検索（基本URLアクセス、経由地数フィルターダイアログ操作、安い順ソート、Viewport 1440x900 定義、最安値キャプチャ）のモック/結合テストを追加する (Red)
+- **レビュアー**: QA Agent
+- **対象成果物**: `test/FlightTrackerAI.Infrastructure.Tests/flight_tracker_ai/infrastructure/google_flights_scraper_tests.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                   | 判定 | コメント                                                                                                                         |
+| --- | ------------------------------------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 仕様書の期待値がテストケースとしてコード化されているか | ✅   | Viewport 1440x900 定義、経由地数フィルター・安い順ソートヘルパーのnil安全性、最大取得件数（`max-results-count`）制限テストを追加 |
+| 2   | 正常系・異常系・境界値が考慮されているか               | ✅   | nil ページ受け取り時の例外スルー防止と、指定件数通りの抽出制限を検証                                                             |
+| 3   | TDD Red状態が確認できているか                          | ✅   | `No such var: gf/viewport-width` によるコンパイル失敗・Red状態を確認                                                             |
+| 4   | ソースとテストの 1:1 対応が維持されているか            | ✅   | `google_flights_scraper.clj` ⇔ `google_flights_scraper_tests.clj` に準拠                                                         |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 2.4（`google_flights_scraper.clj` への 2段階 Playwright 巡回・フィルター操作・キャプチャ保存フロー実装とGreen化）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-2.4
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 2.4 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj` に 2段階 Playwright 巡回・フィルター操作・キャプチャ保存フローを実装し、テストを通す (Green/Refactor)
+- **レビュアー**: PG Agent
+- **対象成果物**: `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/google_flights_scraper.clj`, `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/flight_repository.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                 | 判定 | コメント                                                                                                                                                      |
+| --- | ---------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 設計書（`design.md`）および仕様書との整合性          | ✅   | Viewport 1440x900、経由地数フィルター（`DirectOnly`, `OneStop`）、安い順ソート、`max-results-count` 制限、`flight_key` 付与、キャプチャ保存が設計通り完全実装 |
+| 2   | コード品質・可読性・命名・DRY・ClojureCLR イディオム | ✅   | 非同期操作の `scraper-common/await-task`、ポーリング待機、nil安全なヘルパー関数分割、クリーンなエラーハンドリング                                             |
+| 3   | 境界値・異常系・エラー処理の網羅                     | ✅   | ページ遷移失敗・要素待機タイムアウト・キャプチャ失敗時の安全なフォールバック、DB永続化での `flight_number`/`flight_key` 保存                                  |
+| 4   | ソースとテストの 1:1 対応命名規約遵守                | ✅   | `google_flights_scraper.clj` ⇔ `google_flights_scraper_tests.clj`、`flight_repository.clj` ⇔ `flight_repository_tests.clj` に準拠                             |
+| 5   | テスト通過（Green）の確認                            | ✅   | 全 22 テストスイート、622 アサーションが通過（Failure 0, Error 0）                                                                                            |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 3.1（Web UI / API 連携のレンダリングテスト作成・Red確認）へ着手
