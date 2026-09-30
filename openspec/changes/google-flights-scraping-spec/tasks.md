@@ -18,7 +18,7 @@
 
 - [x] 3.1 `task_views_tests.clj` に新規登録フォーム（時間レンジ、経由地数、取得件数）および一覧・詳細での便名表示のレンダリングテストを追加する (Red)
 - [x] 3.2 `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/task_views.clj` および `routes.clj` を更新し、HTMLモック（`doc/mock/`）に準拠した UI レンダリングとパラメータ受け渡しを実装する (Green)
-- [ ] 3.3 自動フォーマット（`dotnet format`, `npx prettier --write`）を実行し、静的検証エラーがないことを確認する
+- [x] 3.3 自動フォーマット（`dotnet format`, `npx prettier --write`）を実行し、静的検証エラーがないことを確認する
 
 ## 4. E2E 検証・カバレッジ達成およびレポート確認
 
