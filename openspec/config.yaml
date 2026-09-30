@@ -70,6 +70,7 @@ rules:
     - "変更の「What & Why」を簡潔に記述（500語以内推奨）"
     - "Non-goals（やらないこと）セクションを含める"
     - "Propose完了時: User Agent・SE Agentによるレビュー必須（checklist_propose.md 使用）"
+    - "全役割LGTMで次フェーズへ。指摘がある場合は proposal.md 更新して再レビュー"
 
   # デルタ仕様作成時のルール
   specs:
@@ -79,7 +80,7 @@ rules:
   # 設計書作成時のルール
   design:
     - "どう実現するか（アーキテクチャ・データフロー・インターフェース等）を記述"
-    - "UI/UX変更がある場合は doc/mock/ 配下にモックアップを作成し、ユーザー合意を得ること"
+    - "UI/UX変更を伴う場合は、必ずTailwind CSS + Alpine.jsによるHTMLモックアップ（doc/mock/ または openspec/changes/<name>/mockup.html）を作成し、画面プレビュー・アニメーション・状態変化をインタラクティブに検証できるようにする"
     - "実装タスクへの分解粒度は「2時間以内で完了する単位」を目安にする"
 
   # タスクリスト作成時のルール
@@ -113,5 +114,5 @@ operations:
       - "UI変更があった場合は doc/mock/ のモックが実装成果物と同期していることを確認する"
       - "アーカイブ前に関連ドキュメント（README等）があれば同期更新する"
       - "アーカイブ時に変更のサマリ（何が変わったか、テスト結果、レビュー指摘の対応状況）を記録する"
-      - "Archive前: 全役割（User/SE/PG/QA Agent）による総括レビュー必須（checklist_archive.md 使用）"
+      - "Archive前: 全役割（User/SE/PG/QA Agent）による総括レビュー必須（checklist_archive.md 使用：テスト結果・エビデンス確認含む）"
       - "ユーザー最終合意記録後に openspec archive 実行"
