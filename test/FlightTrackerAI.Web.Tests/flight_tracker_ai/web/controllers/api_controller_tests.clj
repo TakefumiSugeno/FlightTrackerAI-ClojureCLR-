@@ -336,4 +336,26 @@
       (is (str/includes? (:body res) "BADORIGIN"))
       (is (str/includes? (:body res) "スタンドアローンエラー")))))
 
+(deftest test-post-tasks-with-time-ranges-and-max-results
+  (testing "POST /api/tasks sets outbound/inbound time ranges and max-results-count correctly"
+    (let [conn-str (create-test-db)
+          form-body "title=時間帯テスト&origin=HND&destination=CDG&tripType=RoundTrip&outboundDate=2026-08-01&inboundDate=2026-08-10&outboundTimeRange=Morning&inboundTimeRange=Evening&maxResultsCount=15&maxStops=OneStop"
+          res (api/handle-api-request conn-str "POST" "/api/tasks" form-body)]
+      (is (= 200 (:status res)))
+      (let [tasks (task-repo/get-all-tasks conn-str)
+            t (first tasks)]
+        (is (= :morning (:outbound-time-range t)))
+        (is (= :evening (:inbound-time-range t)))
+        (is (= 15 (:max-results-count t)))
+        (is (= :one-stop (:max-stops t)))
+        ;; Update test
+        (let [update-body "title=時間帯テスト更新&origin=HND&destination=CDG&outboundTimeRange=Afternoon&inboundTimeRange=EarlyMorning&maxResultsCount=5&maxStops=DirectOnly"
+              update-res (api/handle-api-request conn-str "POST" (str "/api/tasks/" (:id t)) update-body)
+              updated-t (task-repo/get-task-by-id conn-str (:id t))]
+          (is (= 200 (:status update-res)))
+          (is (= :afternoon (:outbound-time-range updated-t)))
+          (is (= :early-morning (:inbound-time-range updated-t)))
+          (is (= 5 (:max-results-count updated-t)))
+          (is (= :direct-only (:max-stops updated-t))))))))
+
 

@@ -39,6 +39,7 @@
    'flight-tracker-ai.web.views.layout-tests
    'flight-tracker-ai.web.views.dashboard-tests
    'flight-tracker-ai.web.views.modals-tests
+   'flight-tracker-ai.web.views.task-views-tests
    'flight-tracker-ai.web.controllers.api-controller-tests
    'flight-tracker-ai.web.server-tests
    'flight-tracker-ai.web.integration.integration-flow-tests])

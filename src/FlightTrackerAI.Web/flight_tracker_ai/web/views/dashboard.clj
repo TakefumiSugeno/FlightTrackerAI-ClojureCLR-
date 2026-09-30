@@ -1,5 +1,6 @@
 (ns flight-tracker-ai.web.views.dashboard
   (:require [flight-tracker-ai.web.views.html-dsl :as h]
+            [flight-tracker-ai.web.views.task-views :as task-views]
             [flight-tracker-ai.core.domain :as domain]
             [clojure.string :as str])
   (:import [System DateTimeOffset TimeSpan DateOnly]))
@@ -137,11 +138,13 @@
           [:span {:class "badge-google text-[10px] font-bold px-1.5 py-0.5 rounded"} "Google"]
           (= provider :skyscanner)
           [:span {:class "badge-skyscanner text-[10px] font-bold px-1.5 py-0.5 rounded"} "Skyscanner"])]]
-      [:div {:class "flex items-baseline gap-2 mt-0.5"}
+      [:div {:class "flex items-baseline gap-2 mt-0.5 flex-wrap"}
        (if lowest-price
          [:p {:class (if is-price-met "text-2xl font-black text-emerald-400" "text-2xl font-black text-white")}
           (str "¥" (.ToString ^long lowest-price "N0"))]
          [:p {:class "text-xl font-bold text-slate-500"} "未取得"])
+       (when-let [fb (task-views/render-flight-number-badge (:last-lowest-flight-number task-item))]
+         fb)
        (when target-price
          [:span {:class "text-xs text-slate-400"}
           (str "/ 目標: ¥" (.ToString ^long target-price "N0"))])]]
@@ -239,8 +242,11 @@
             (if target-price
               (str "¥" (.ToString ^long target-price "N0"))
               [:span {:class "text-slate-500"} "-"])]
-           ;; 7. 最安航空会社
-           [:td {:class "px-3 py-2.5 text-slate-300 max-w-[120px] truncate"} airlines]
+           ;; 7. 最安航空会社 & 便名
+           [:td {:class "px-3 py-2.5 text-slate-300 max-w-[130px]"}
+            [:div {:class "truncate"} airlines]
+            (when-let [fb (task-views/render-flight-number-badge (:last-lowest-flight-number t))]
+              [:div {:class "mt-1"} fb])]
            ;; 8. メモ
            [:td {:class "px-3 py-2.5 text-slate-400 max-w-[130px] truncate"}
             [:span {:class "cursor-pointer hover:text-sky-400 transition"

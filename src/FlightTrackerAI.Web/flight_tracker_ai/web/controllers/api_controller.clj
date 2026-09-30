@@ -81,6 +81,9 @@
                     "DirectOnly" :direct-only
                     "OneStop" :one-stop
                     :any-stops)
+        outbound-range (domain/string->time-range (:outboundTimeRange form))
+        inbound-range (domain/string->time-range (:inboundTimeRange form))
+        max-results (try (long (read-string (or (:maxResultsCount form) "10"))) (catch Exception _ 10))
         now (DateTimeOffset/UtcNow)
         task-title (if-not (str/blank? (:title form))
                      (:title form)
@@ -95,6 +98,9 @@
      :destination (:ok dest-res)
      :trip-type trip
      :max-stops max-stops
+     :outbound-time-range outbound-range
+     :inbound-time-range inbound-range
+     :max-results-count max-results
      :preferred-airlines []
      :target-price-jpy target-price
      :check-interval-hours interval
@@ -299,6 +305,15 @@
                                       "OneStop" :one-stop
                                       :any-stops)
                                     (:max-stops t))
+                    updated-outbound-range (if (some? (:outboundTimeRange form))
+                                             (domain/string->time-range (:outboundTimeRange form))
+                                             (:outbound-time-range t))
+                    updated-inbound-range (if (some? (:inboundTimeRange form))
+                                            (domain/string->time-range (:inboundTimeRange form))
+                                            (:inbound-time-range t))
+                    updated-max-results (if-not (str/blank? (:maxResultsCount form))
+                                          (try (long (read-string (:maxResultsCount form))) (catch Exception _ (:max-results-count t)))
+                                          (:max-results-count t))
                     is-full-form (or (some? (:origin form)) (some? (:title form)))
                     updated-webhook (if is-full-form
                                       (if (or (= (:useDefaultWebhook form) "true") (= (:useDefaultWebhook form) "on"))
@@ -323,6 +338,9 @@
                                      :origin (:ok origin-res)
                                      :destination (:ok dest-res)
                                      :max-stops updated-stops
+                                     :outbound-time-range updated-outbound-range
+                                     :inbound-time-range updated-inbound-range
+                                     :max-results-count updated-max-results
                                      :target-price-jpy target-price
                                      :check-interval-hours interval
                                      :notification-webhook-url updated-webhook

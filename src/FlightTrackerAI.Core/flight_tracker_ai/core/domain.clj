@@ -67,6 +67,9 @@
         (= lower "evening") :evening
         :else :any))))
 
+(def time-range->string time-range-to-string)
+(def string->time-range time-range-from-string)
+
 ;; -------------------------------------------------------------
 ;; 3. TaskStatus (タスク状態)
 ;; -------------------------------------------------------------

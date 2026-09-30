@@ -35,14 +35,19 @@
    :last_lowest_price_jpy (if (.IsDBNull reader 20) nil (.GetInt32 reader 20))
    :last_lowest_airlines (if (.IsDBNull reader 21) nil (.GetString reader 21))
    :last_lowest_provider (if (.IsDBNull reader 22) nil (.GetString reader 22))
-   :ai_analysis_summary (if (.IsDBNull reader 23) nil (.GetString reader 23))})
+   :ai_analysis_summary (if (.IsDBNull reader 23) nil (.GetString reader 23))
+   :outbound_time_range (if (.IsDBNull reader 24) nil (.GetString reader 24))
+   :inbound_time_range (if (.IsDBNull reader 25) nil (.GetString reader 25))
+   :max_results_count (if (.IsDBNull reader 26) 10 (.GetInt32 reader 26))
+   :last_lowest_flight_number (if (.IsDBNull reader 27) nil (.GetString reader 27))})
 
 (def ^:private select-columns
   "id, title, origin, destination, trip_type, outbound_date, inbound_date,
    preferred_airlines, max_stops, target_price_jpy, check_interval_hours,
    webhook_url, user_notes, is_headless, status, error_message, consecutive_failures,
    created_at, updated_at, last_checked_at, last_lowest_price_jpy,
-   last_lowest_airlines, last_lowest_provider, ai_analysis_summary")
+   last_lowest_airlines, last_lowest_provider, ai_analysis_summary,
+   outbound_time_range, inbound_time_range, max_results_count, last_lowest_flight_number")
 
 (defn get-all-tasks [^String connection-string]
   (with-open [conn (db/create-connection connection-string)]
@@ -102,13 +107,15 @@
                   preferred_airlines, max_stops, target_price_jpy, check_interval_hours,
                   webhook_url, user_notes, is_headless, status, error_message, consecutive_failures,
                   created_at, updated_at, last_checked_at, last_lowest_price_jpy,
-                  last_lowest_airlines, last_lowest_provider, ai_analysis_summary
+                  last_lowest_airlines, last_lowest_provider, ai_analysis_summary,
+                  outbound_time_range, inbound_time_range, max_results_count, last_lowest_flight_number
               ) VALUES (
                   @Id, @Title, @Origin, @Destination, @TripType, @OutboundDate, @InboundDate,
                   @PreferredAirlines, @MaxStops, @TargetPriceJpy, @CheckIntervalHours,
                   @WebhookUrl, @UserNotes, @IsHeadless, @Status, @ErrorMessage, @ConsecutiveFailures,
                   @CreatedAt, @UpdatedAt, @LastCheckedAt, @LastLowestPriceJpy,
-                  @LastLowestAirlines, @LastLowestProvider, @AiAnalysisSummary
+                  @LastLowestAirlines, @LastLowestProvider, @AiAnalysisSummary,
+                  @OutboundTimeRange, @InboundTimeRange, @MaxResultsCount, @LastLowestFlightNumber
               );")
         (add-param cmd "@Id" (:id row))
         (add-param cmd "@Title" (:title row))
@@ -134,6 +141,10 @@
         (add-param cmd "@LastLowestAirlines" (:last_lowest_airlines row))
         (add-param cmd "@LastLowestProvider" (:last_lowest_provider row))
         (add-param cmd "@AiAnalysisSummary" (:ai_analysis_summary row))
+        (add-param cmd "@OutboundTimeRange" (:outbound_time_range row))
+        (add-param cmd "@InboundTimeRange" (:inbound_time_range row))
+        (add-param cmd "@MaxResultsCount" (:max_results_count row))
+        (add-param cmd "@LastLowestFlightNumber" (:last_lowest_flight_number row))
         (.ExecuteNonQuery cmd)
         nil
         (finally (.Dispose cmd))))))
@@ -166,7 +177,11 @@
                   last_lowest_price_jpy = @LastLowestPriceJpy,
                   last_lowest_airlines = @LastLowestAirlines,
                   last_lowest_provider = @LastLowestProvider,
-                  ai_analysis_summary = @AiAnalysisSummary
+                  ai_analysis_summary = @AiAnalysisSummary,
+                  outbound_time_range = @OutboundTimeRange,
+                  inbound_time_range = @InboundTimeRange,
+                  max_results_count = @MaxResultsCount,
+                  last_lowest_flight_number = @LastLowestFlightNumber
               WHERE id = @Id;")
         (add-param cmd "@Id" (:id row))
         (add-param cmd "@Title" (:title row))
@@ -191,35 +206,43 @@
         (add-param cmd "@LastLowestAirlines" (:last_lowest_airlines row))
         (add-param cmd "@LastLowestProvider" (:last_lowest_provider row))
         (add-param cmd "@AiAnalysisSummary" (:ai_analysis_summary row))
+        (add-param cmd "@OutboundTimeRange" (:outbound_time_range row))
+        (add-param cmd "@InboundTimeRange" (:inbound_time_range row))
+        (add-param cmd "@MaxResultsCount" (:max_results_count row))
+        (add-param cmd "@LastLowestFlightNumber" (:last_lowest_flight_number row))
         (.ExecuteNonQuery cmd)
         nil
         (finally (.Dispose cmd))))))
 
 (defn update-check-result
-  [^String connection-string ^Guid task-id ^DateTimeOffset checked-at lowest-price lowest-airlines lowest-provider]
-  (with-open [conn (db/create-connection connection-string)]
-    (let [^IDbCommand cmd (.CreateCommand conn)
-          checked-str (.ToString checked-at "o")
-          provider-str (when lowest-provider (domain/scraping-provider-to-string lowest-provider))]
-      (try
-        (set! (.CommandText cmd)
-              "UPDATE tasks SET
-                  last_checked_at = @CheckedAt,
-                  last_lowest_price_jpy = COALESCE(@LowestPrice, last_lowest_price_jpy),
-                  last_lowest_airlines = COALESCE(@LowestAirlines, last_lowest_airlines),
-                  last_lowest_provider = COALESCE(@LowestProvider, last_lowest_provider),
-                  consecutive_failures = 0,
-                  error_message = NULL,
-                  updated_at = @CheckedAt
-              WHERE id = @Id;")
-        (add-param cmd "@Id" (.ToString task-id))
-        (add-param cmd "@CheckedAt" checked-str)
-        (add-param cmd "@LowestPrice" lowest-price)
-        (add-param cmd "@LowestAirlines" lowest-airlines)
-        (add-param cmd "@LowestProvider" provider-str)
-        (.ExecuteNonQuery cmd)
-        nil
-        (finally (.Dispose cmd))))))
+  ([^String connection-string ^Guid task-id ^DateTimeOffset checked-at lowest-price lowest-airlines lowest-provider]
+   (update-check-result connection-string task-id checked-at lowest-price lowest-airlines lowest-provider nil))
+  ([^String connection-string ^Guid task-id ^DateTimeOffset checked-at lowest-price lowest-airlines lowest-provider lowest-flight-number]
+   (with-open [conn (db/create-connection connection-string)]
+     (let [^IDbCommand cmd (.CreateCommand conn)
+           checked-str (.ToString checked-at "o")
+           provider-str (when lowest-provider (domain/scraping-provider-to-string lowest-provider))]
+       (try
+         (set! (.CommandText cmd)
+               "UPDATE tasks SET
+                   last_checked_at = @CheckedAt,
+                   last_lowest_price_jpy = COALESCE(@LowestPrice, last_lowest_price_jpy),
+                   last_lowest_airlines = COALESCE(@LowestAirlines, last_lowest_airlines),
+                   last_lowest_provider = COALESCE(@LowestProvider, last_lowest_provider),
+                   last_lowest_flight_number = COALESCE(@LowestFlightNumber, last_lowest_flight_number),
+                   consecutive_failures = 0,
+                   error_message = NULL,
+                   updated_at = @CheckedAt
+               WHERE id = @Id;")
+         (add-param cmd "@Id" (.ToString task-id))
+         (add-param cmd "@CheckedAt" checked-str)
+         (add-param cmd "@LowestPrice" lowest-price)
+         (add-param cmd "@LowestAirlines" lowest-airlines)
+         (add-param cmd "@LowestProvider" provider-str)
+         (add-param cmd "@LowestFlightNumber" lowest-flight-number)
+         (.ExecuteNonQuery cmd)
+         nil
+         (finally (.Dispose cmd)))))))
 
 (defn record-failure [^String connection-string ^Guid task-id ^String error-message]
   (with-open [conn (db/create-connection connection-string)]

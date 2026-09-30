@@ -256,3 +256,54 @@
 
 - **LGTM**: true
 - **次のアクション**: Task 3.1（Web UI / API 連携のレンダリングテスト作成・Red確認）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-3.1
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 3.1 `task_views_tests.clj` に新規登録フォーム（時間レンジ、経由地数、取得件数）および一覧・詳細での便名表示のレンダリングテストを追加する (Red)
+- **レビュアー**: QA Agent
+- **対象成果物**: `test/FlightTrackerAI.Web.Tests/flight_tracker_ai/web/views/task_views_tests.clj`
+
+## チェックリスト結果
+
+| # | 観点 | 判定 | コメント |
+|---|---|---|---|
+| 1 | 仕様書の期待値がテストケースとしてコード化されているか | ✅ | 時間帯レンジ選択肢（`Morning`, `Evening` 等）、経由地数（`maxStops`）、巡回取得件数（`maxResultsCount`）、および便名バッジ表示のテストを追加 |
+| 2 | 正常系・異常系・境界値が考慮されているか | ✅ | nil・空文字便名時の nil 返却、複数レンジ属性の属性値検証 |
+| 3 | TDD Red状態が確認できているか | ✅ | `task_views` 未作成による `FileNotFoundException` でRed状態を確認 |
+| 4 | ソースとテストの 1:1 対応が維持されているか | ✅ | `task_views.clj` ⇔ `task_views_tests.clj` の 1:1 対応を維持 |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 3.2（`task_views.clj` および `modals.clj`, `api_controller.clj` への UI 実装とパラメータ連携）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-3.2
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 3.2 `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/task_views.clj` および `modals.clj`, `dashboard.clj`, `api_controller.clj`, `task_repository.clj` を更新し、HTMLモック（`doc/mock/`）に準拠した UI レンダリングとパラメータ受け渡しを実装する (Green)
+- **レビュアー**: PG Agent
+- **対象成果物**: `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/task_views.clj`, `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/modals.clj`, `src/FlightTrackerAI.Web/flight_tracker_ai/web/views/dashboard.clj`, `src/FlightTrackerAI.Web/flight_tracker_ai/web/controllers/api_controller.clj`, `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/task_repository.clj`, `src/FlightTrackerAI.Core/flight_tracker_ai/core/domain.clj`
+
+## チェックリスト結果
+
+| # | 観点 | 判定 | コメント |
+|---|---|---|---|
+| 1 | 設計書（`design.md`）および UIモック（`doc/mock/` または `mockup.html`）との整合性 | ✅ | `mockup_new_task.html` & `mockup.html` に完全準拠し、時間帯レンジ・経由地数・巡回時取得件数コントロール、タスク名入力欄の 2 列全幅（`col-span-2`）、便名バッジ表示を実装 |
+| 2 | コード品質・可読性・命名・DRY・ClojureCLR イディオム | ✅ | `task-views` によるフォーム部品・便名バッジのモジュール分割、`domain` での変換関数エイリアス（`time-range->string`, `string->time-range`）、クリーンなパラメータパース |
+| 3 | 境界値・異常系・エラー処理の網羅 | ✅ | 片道選択時の到着時間帯非表示、便名nil/空文字時のフォールバック、数値パース失敗時の既定値適用、DB永続化でのNULLセーフを網羅 |
+| 4 | ソースとテストの 1:1 対応命名規約遵守 | ✅ | `task_views.clj` ⇔ `task_views_tests.clj`、`api_controller.clj` ⇔ `api_controller_tests.clj` の対応を遵守 |
+| 5 | テスト通過（Green）の確認 | ✅ | 全 23 テストスイート、645 アサーションが通過（Failure 0, Error 0） |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 3.3（自動フォーマットの実行と静的検証確認）へ着手
+
+
