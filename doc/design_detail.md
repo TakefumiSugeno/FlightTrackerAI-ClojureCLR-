@@ -328,6 +328,7 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
 | **ヘッダー**               | 巡回ワーカー稼働ステータス         | `worker-status`                       | N/A (メモリ常駐状態)                           |    OK    |
 | **有頭手動支援ガイダンス** | PRESS & HOLD 解除案内 (UC-10)      | `manual-challenge-event`              | N/A (ランタイム通知)                           |    OK    |
 | **全体設定モーダル**       | 全体デフォルト巡回間隔 (12h)       | `:default-check-interval-hours`       | `system_settings.default_check_interval_hours` |    OK    |
+|                            | デフォルト取得件数 (10件)          | `:default-max-results-count`          | `system_settings.default_max_results_count`   |    OK    |
 |                            | グローバル Webhook URL             | `:default-webhook-url`                | `system_settings.default_webhook_url`          |    OK    |
 |                            | OpenRouter API Key                 | `:openrouter-api-key`                 | `system_settings.openrouter_api_key`           |    OK    |
 |                            | プロバイダー有効化                 | `:enable-google-flights / skyscanner` | `enable_google_flights / skyscanner`           |    OK    |
@@ -335,7 +336,10 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
 |                            | 目的地 (都市名/IATA)               | `:destination`                        | `tasks.destination` (TEXT)                     |    OK    |
 |                            | 旅行タイプ (往復/片道)             | `:trip-type`                          | `tasks.trip_type` (TEXT)                       |    OK    |
 |                            | 往路・復路出発日                   | `:outbound-date / :inbound-date`      | `tasks.outbound_date / inbound_date`           |    OK    |
-|                            | 許容乗継回数                       | `:max-stops`                          | `tasks.max_stops` (TEXT)                       |    OK    |
+|                            | 出発時間レンジ (06:00-12:00等)     | `:outbound-time-range`                | `tasks.outbound_time_range` (TEXT)             |    OK    |
+|                            | 到着時間レンジ                     | `:inbound-time-range`                 | `tasks.inbound_time_range` (TEXT)              |    OK    |
+|                            | 許容経由地数                       | `:max-stops`                          | `tasks.max_stops` (TEXT)                       |    OK    |
+|                            | 巡回時取得件数 (10件)              | `:max-results-count`                  | `tasks.max_results_count` (INTEGER)            |    OK    |
 |                            | 目標アラート価格 (JPY)             | `:target-price-jpy`                   | `tasks.target_price_jpy` (INTEGER)             |    OK    |
 |                            | 巡回間隔                           | `:check-interval-hours`               | `tasks.check_interval_hours` (INTEGER)         |    OK    |
 |                            | タスク名                           | `:title`                              | `tasks.title` (TEXT)                           |    OK    |
@@ -348,12 +352,13 @@ ClojureCLR から .NET の標準 HTTP サーバー（`System.Net.HttpListener`�
 |                            | 日程・発着時刻                     | `:trip-type` + 発着時刻               | `tasks.outbound_date / inbound_date`           |    OK    |
 |                            | ユーザーメモ・要望表示             | `:user-notes`                         | `tasks.user_notes` (TEXT)                      |    OK    |
 |                            | ステータス (達成/監視/停止/エラー) | `:status` + `target-achieved?`        | `tasks.status` (TEXT)                          |    OK    |
-|                            | 最安航空会社まとめ (往/復)         | `:last-lowest-airlines`               | `tasks.last_lowest_airlines` (TEXT)            |    OK    |
+|                            | 最安便名・航空会社                 | `:last-lowest-flight-number / airlines` | `tasks.last_lowest_flight_number / airlines`  |    OK    |
 |                            | 現在最安値 (JPY)                   | `:last-lowest-price-jpy`              | `tasks.last_lowest_price_jpy` (INTEGER)        |    OK    |
 |                            | 最安提供ソース (Google/Skyscanner) | `:last-lowest-provider`               | `tasks.last_lowest_provider` (TEXT)            |    OK    |
 |                            | データ取得日時 (年+日時 JST)       | `:last-checked-at`                    | `tasks.last_checked_at` (TEXT)                 |    OK    |
 | **詳細: 旅程タイムライン** | 往路/復路区分                      | `:leg-index` (0: 往, 1: 復)           | `segments_json -> LegIndex`                    |    OK    |
-|                            | 各区間航空会社・便名               | `:marketing-airline / :flight-number` | `segments_json -> MarketingAirline`            |    OK    |
+|                            | 各区間便名 (5J 5055, NH 869等)     | `:flight-number`                      | `flight_snapshots.flight_number` (TEXT)        |    OK    |
+|                            | 同一航空券キー                     | `:flight-key`                         | `flight_snapshots.flight_key` (TEXT)           |    OK    |
 |                            | 発着時刻 (ローカル時刻, (+1)表記)  | `:departure-time / :arrival-time`     | `segments_json -> DepartureTime`               |    OK    |
 |                            | AI買い時分析コメントキャッシュ     | `:ai-analysis-summary`                | `task_run_logs.ai_analysis_summary`            |    OK    |
 |                            | 各便金額 (総額)                    | `:price-jpy`                          | `flight_snapshots.price_jpy` (INTEGER)         |    OK    |
@@ -380,10 +385,12 @@ PRAGMA synchronous = NORMAL;
 CREATE TABLE IF NOT EXISTS system_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     default_check_interval_hours INTEGER NOT NULL DEFAULT 12,
+    default_max_results_count INTEGER NOT NULL DEFAULT 10,
     default_webhook_url TEXT,
     openrouter_api_key TEXT,
     enable_google_flights INTEGER NOT NULL DEFAULT 1,
     enable_skyscanner INTEGER NOT NULL DEFAULT 1,
+    headless_mode INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL
 );
 
@@ -395,8 +402,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     trip_type TEXT NOT NULL,
     outbound_date TEXT NOT NULL,
     inbound_date TEXT,
-    preferred_airlines TEXT,
-    max_stops TEXT NOT NULL,
+    outbound_time_range TEXT NOT NULL DEFAULT 'Any',
+    inbound_time_range TEXT NOT NULL DEFAULT 'Any',
+    preferred_airlines TEXT NOT NULL DEFAULT '[]',
+    max_stops TEXT NOT NULL DEFAULT 'Any',
+    max_results_count INTEGER NOT NULL DEFAULT 10,
     target_price_jpy INTEGER,
     check_interval_hours INTEGER NOT NULL DEFAULT 12,
     webhook_url TEXT,
@@ -410,6 +420,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     last_checked_at TEXT,
     last_lowest_price_jpy INTEGER,
     last_lowest_airlines TEXT,
+    last_lowest_flight_number TEXT,
     last_lowest_provider TEXT,
     ai_analysis_summary TEXT
 );
@@ -417,13 +428,13 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS task_run_logs (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    completed_at TEXT,
-    is_success INTEGER NOT NULL,
-    error_message TEXT,
-    offers_found_count INTEGER NOT NULL DEFAULT 0,
+    executed_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    found_offers_count INTEGER NOT NULL DEFAULT 0,
     lowest_price_jpy INTEGER,
-    lowest_airlines TEXT,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
     ai_analysis_summary TEXT,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
@@ -433,12 +444,14 @@ CREATE TABLE IF NOT EXISTS flight_snapshots (
     task_id TEXT NOT NULL,
     run_log_id TEXT NOT NULL,
     provider TEXT NOT NULL,
+    flight_number TEXT,
+    flight_key TEXT,
     airlines_summary TEXT NOT NULL,
     departure_time TEXT NOT NULL,
     arrival_time TEXT NOT NULL,
     total_duration_minutes INTEGER NOT NULL,
-    stops_count INTEGER NOT NULL,
-    segments_json TEXT NOT NULL,
+    stops_count INTEGER NOT NULL DEFAULT 0,
+    segments_json TEXT NOT NULL DEFAULT '[]',
     price_jpy INTEGER NOT NULL,
     booking_url TEXT NOT NULL,
     captured_at TEXT NOT NULL,
@@ -448,6 +461,8 @@ CREATE TABLE IF NOT EXISTS flight_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_snapshots_task_captured ON flight_snapshots(task_id, captured_at);
+CREATE INDEX IF NOT EXISTS idx_snapshots_flight_key ON flight_snapshots(flight_key, captured_at);
+CREATE INDEX IF NOT EXISTS idx_snapshots_task_price ON flight_snapshots(task_id, price_jpy);
 CREATE INDEX IF NOT EXISTS idx_snapshots_run_log ON flight_snapshots(run_log_id);
 CREATE INDEX IF NOT EXISTS idx_run_logs_task ON task_run_logs(task_id);
 ```
@@ -506,24 +521,34 @@ Playwright による実ブラウザ自動操作は、元リポジトリ（F#版�
 
 ### 6.2 Google Flights スクレーパー (`google_flights_scraper.clj`)
 
-1. **検索URL生成 (`build-search-url`)**:
+1. **1段階目の検索: URL生成と基本条件遷移 (`build-search-url`, `scrape-async`)**:
    - 片道: `https://www.google.com/travel/flights?q=Flights%20to%20[DEST]%20from%20[ORIG]%20on%20[DATE]&hl=ja&curr=JPY`
    - 往復: `https://www.google.com/travel/flights?q=Flights%20to%20[DEST]%20from%20[ORIG]%20on%20[OB]%20through%20[IB]&hl=ja&curr=JPY`
-2. **ブラウザ自動巡回 (`scrape-async`)**:
    - `page.GotoAsync(url, PageGotoOptions(WaitUntil = DOMContentLoaded, Timeout = 30000))`
    - Cookie同意スキップ: `button[aria-label*='同意'], button[aria-label*='Accept']` を検知・クリック。
-   - **検索結果カード待機ポーリング (`loop/recur`)**:
-     - セレクタ: `li.pIav2d, div[role='listitem'].pIav2d, div.yR1fYc, [class*='pIav2d']`
-     - 500ms 間隔で最大 10 回ポーリング。再帰ではなく `loop/recur` によりスタック消費ゼロを保証。
-   - **画面キャプチャ保存**:
-     - `doc/work/screenshots/yyyyMMdd-HHmmss_GoogleFlights_[taskId].png` に保存。
-   - **カードDOM要素テキスト抽出**:
-     - 価格: `.YMlIz.FpEdX span, span[aria-label*='円'], span[aria-label*='JPY'], [class*='YMlIz']`
-     - 航空会社: `.sSHqwe.tPgKwe.ogfYpf span, .Ir0Voe .sSHqwe, [class*='sSHqwe']`
-     - 発着時刻: `.dpKdp span, .mv1WYe span, [class*='dpKdp']`
-     - 所要時間: `.AdWm1c.gvkrdb, .Ak5kof, [class*='gvkrdb']`
-     - 乗継数: `.EfT7Ae .VG3hNb, .EfT7Ae span, [class*='VG3hNb']`
-   - `parse-offer-element` による `FlightOffer` マップ変換とリスト返却。
+   - 検索結果カード待機ポーリング: `li.pIav2d` が 1 件以上出現するまで 500ms 間隔で最大 10 回待機。
+
+2. **2段階目の検索: 画面上フィルター操作 (経由地数 & ソート順)**:
+   - **経由地数フィルター**:
+     - タスクの `max_stops` が `DirectOnly`（直行便のみ）または `OneStop`（1箇所まで）の場合、画面上部の「経由地数」ボタン（`button[aria-label*='経由地数']`）を `ClickAsync(Force = true)`。
+     - メニューダイアログ内の対応ラジオ選択肢（`直行便のみ` または `1 回以下の経由`）をクリックし、ESC キーで閉じる。
+   - **ソート順 (安い順)**:
+     - 並べ替えボタン（`button[aria-label*='並べ替え'], button[aria-label*='フライト順']`）をクリック。
+     - 「料金が安い順」（または「最安値」タブ）を選択し、安い順に再描画されるのを待機。
+
+3. **画面キャプチャ保存 (ウィンドウサイズ定義 & 最安値表示担保)**:
+   - フィルター＆ソート適用完了後、**ウィンドウサイズ（1440x900）に最安値便（1位）が画面上部に明確に見えている状態**で `page.ScreenshotAsync(PageScreenshotOptions(FullPage = false))` を実行。
+   - 保存先: `doc/work/screenshots/yyyyMMdd-HHmmss_GoogleFlights_[taskId].png`。
+
+4. **フライトデータ抽出 (上位 10 件・設定件数) & 便名完全特定**:
+   - カード要素 `li.pIav2d` を走査し、先頭から指定件数（デフォルト 10 件）を抽出。
+   - **価格抽出**:
+     - `span[aria-label*='円']` の属性値、またはメタ要素 `div.JMc5Xc[aria-label]`（例: `"往復の合計金額 34527 円～"`）から正規表現 `r"(\d+)\s*円"` で抽出。時刻要素（`8:50 – 15:15`）の誤取得バグを完全防止。
+   - **便名抽出**:
+     - 各カードの `itinerary=...` 属性（例: `NRT-MNL-5J-5055-20270227`）から、運航会社コードと便名（例: `5J 5055`）を確実に抽出。乗継時は `5J 5065 ➔ 5J 2516` のように連結。
+   - **同一航空券キー (`flight_key`)**:
+     - `flight_key = task_id + flight_number + outbound_date` を生成・保存。日々の同一便の価格変動（値下がり・値上がり）を追跡可能にする。
+   - 航空会社名、発着時刻、総所要時間、経由地数を `FlightOffer` マップに変換してリスト返却。
 
 ### 6.3 Skyscanner スクレーパー (`skyscanner_scraper.clj`)
 

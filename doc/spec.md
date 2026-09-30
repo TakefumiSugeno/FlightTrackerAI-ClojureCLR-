@@ -43,7 +43,7 @@ flowchart TD
 | **UC-08** | AI価格分析・レコメンド             | 現在の価格水準が買い時か様子見かをAIが要約し、画面上で提示                                                             | ユーザー/システム |
 | **UC-09** | クイックメモ編集                   | カード・リスト行からモーダルを開き、タスク要望メモ（User Notes）をインライン即時更新                                   | ユーザー          |
 | **UC-10** | 有頭手動支援ガイダンス             | Bot検知（PRESS & HOLD）発生時にWebUI上で解除カウントダウンとブラウザ操作を案内し巡回復帰                               | ユーザー/システム |
-| **UC-11** | エラー時リカバリ・再試行           | 巡回エラー時の人間向け理由表示および「今すぐ再試行」による能動的リカバリ実行                                           | ユーザー          |
+| **UC-11** | エラー時リカバリ・再試行           | 巡回エラー時の人間向け理由表示および「今すぐ再試行」による能動的リカバリ実行                                           | ユーザー/システム |
 
 ---
 
@@ -51,38 +51,46 @@ flowchart TD
 
 ### 3.1 監視タスク管理機能 (Watch Task Management)
 
-- **登録項目（全12項目・手動登録モーダルおよびスタンドアロン登録画面で完全統一）**:
+- **登録項目（全15項目・手動登録モーダルおよびスタンドアロン登録画面で完全統一）**:
   - `Title`: タスク名（任意、未入力時は `[Origin] ➔ [Destination]` で自動補完）
   - `Origin`: 出発地（IATAコード / 都市名サジェスト）
   - `Destination`: 目的地（IATAコード / 都市名サジェスト）
   - `TripType`: 旅行タイプ（往復: `RoundTrip` または 片道: `OneWay`）
   - `OutboundDate`: 往路出発日 (`YYYY-MM-DD`、本日以降ガード `min` 属性付き)
   - `InboundDate`: 復路出発日 (`YYYY-MM-DD`、本日以降ガード `min` 属性付き、片道時は非表示)
-  - `MaxStops`: 許容乗継回数（乗継制限なし: `Any`, 1回乗継まで: `OneStop`, 直行便のみ: `DirectOnly`）
+  - `OutboundTimeRange`: 往路出発時間レンジ（指定なし: `Any`, 早朝: `EarlyMorning`(00:00-06:00), 午前: `Morning`(06:00-12:00), 午後: `Afternoon`(12:00-18:00), 夜間: `Evening`(18:00-24:00), またはカスタム指定 `HH:MM-HH:MM`）
+  - `InboundTimeRange`: 往路到着時間（または復路出発時間）レンジ（指定なし: `Any`, プリセットまたはカスタム指定）
+  - `MaxStops`: 許容経由地数（指定なし: `Any`, 直行便のみ: `DirectOnly`, 1箇所まで: `OneStop`）
+  - `MaxResultsCount`: 取得件数（デフォルト: `10` 件、1〜50件指定可能）
   - `CheckIntervalHours`: 巡回間隔（全体設定に従う、または 3h/6h/12h/24h）
   - `TargetPriceJpy`: 目標アラート価格 (JPY、整数、任意)
   - `UserNotes`: 構造化メモ / 要望・制約（任意、Markdown・箇条書き対応）
   - `UseDefaultWebhook`: デフォルトの Discord / Slack Webhook に通知する (デフォルト: ON、OFF時は `"DISABLED"` を格納し通知完全停止)
   - `ShowBrowser`: 定期巡回時もブラウザを表示する (手動支援モード、デフォルト: OFF)
 
-### 3.2 複数航空会社（トランジット・往復別社）のデータ構造と表示仕様
+### 3.2 複数航空会社（トランジット・往復別社）および便名のデータ構造と表示仕様
 
-1つの旅程で複数の航空会社が関与する以下の全パターンに対応します:
+1つの旅程で複数の航空会社が関与する以下の全パターンに対応し、**便名（Flight Number）を完全保持・表示**します:
 
-1. **往復別航空会社**: 往路がJAL、復路がエールフランスなど
-2. **乗継（トランジット）別航空会社**: 第1区間がANA、第2区間がシンガポール航空など
-3. **コードシェア（共同運航）**: 販売元と実際の運航会社（Operating Carrier）が異なる場合
+1. **便名（Flight Number）の完全特定**:
+   - カード内の旅程メタ属性（`itinerary=...`）から、運航便名（例: `5J 5055`, `NH 869`, `PR 431`）を確実に抽出。
+2. **同一航空券判定キー（`flight_key`）**:
+   - `flight_key = task_id + flight_numbers_summary + outbound_date`
+   - 同一フライト旅程を特定し、日々の巡回で「特定便の価格推移（値上がり・値下がり）」を100%確実に追跡。
+3. **往復別航空会社**: 往路がJAL、復路がエールフランスなど
+4. **乗継（トランジット）別航空会社**: 第1区間がANA、第2区間がシンガポール航空など
+5. **コードシェア（共同運航）**: 販売元と実際の運航会社（Operating Carrier）が異なる場合
 
 - **カード / 一覧リスト表示**:
-  - 複数会社が関与する場合、`JAL / エールフランス` や `複数社 (ANA + SQ)` のように明記。
+  - 便名を明記（例: `[セブパシフィック] 5J 5055`, `[ANA] NH 869`）。複数社乗継の場合は `5J 5065 ➔ 5J 2516` のように全区間の便名と航空会社を明記。
 - **詳細モーダル（旅程タイムライン）**:
-  - 往路（Outbound）と復路（Inbound）をブロック分離。
-  - 各フライトセグメントごとに「航空会社名」「便名」「出発/到着時刻・空港」「所要時間」「乗継地での待ち時間（レイオーバー時間）」を視覚的タイムラインで表示。
+  - 各フライトセグメントごとに「航空会社名」「便名」「出発/到着時刻・空港」「所要時間」「乗継地での待ち時間」を視覚的タイムラインで表示。
 
 ### 3.3 グローバル設定管理機能 (System Settings)
 
 - アプリケーション全体で共通保持する設定項目:
   - `DefaultCheckIntervalHours`: 新規タスクのデフォルト巡回間隔（デフォルト: **12時間**、設定変更可能: 3h, 6h, 12h, 24h, 任意）
+  - `DefaultMaxResultsCount`: デフォルト取得件数（デフォルト: **10件**）
   - `DefaultWebhookUrl`: グローバル通知先 Discord/Slack Webhook URL
   - `OpenRouterApiKey`: AI支援用 OpenRouter API キー
   - `ScrapingProvidersEnabled`: Google Flights / Skyscanner の巡回有効フラグ
@@ -98,20 +106,25 @@ flowchart TD
   - **SingletonLock 残留防止**: クラッシュや強制終了時に残留した `SingletonLock` / `SingletonCookie` 等を起動前に検知・安全にクリーンアップするフォールバックを組み込み、次回起動不能を防止。
   - `SemaphoreSlim(1, 1)`（`scraper-lock`）による同一プロセス内巡回実行の排他制御。
   - プロセス終了フック (`ProcessExit`) による確実なリソース破棄。
-- **ステルス (Stealth) 設定 & ブラウザコンテキスト**:
+- **ステルス (Stealth) 設定 & ウィンドウサイズ定義**:
   - `LaunchPersistentContextAsync` による永続コンテキスト生成。
-  - `AddInitScriptAsync` による Stealth 注入スクリプト:
-    - `Object.defineProperty(navigator, 'webdriver', {get: () => undefined})`
-    - `window.chrome = { runtime: {} }`
-    - `navigator.languages`（`ja-JP, ja, en-US, en`）、`plugins`、`permissions.query` 偽装。
+  - **ウィンドウサイズ定義**: ヘッドレス時・キャプチャ時ともに **幅 1440px × 高さ 900px** の `ViewportSize` で厳密に統一。有頭モード時は `--start-maximized`。
   - 日本語ロケール (`ja-JP`)、タイムゾーン (`Asia/Tokyo`)、BypassCSP, IgnoreHTTPSErrors, Sec-Ch-Ua ヘッダーの適用。
-  - ヘッドレスモード時は `ViewportSize: 1440x900`、有頭モード時は `SlowMo: 150ms`、`--start-maximized`、`ViewportSize: nil`（ウィンドウサイズ自動追従）。
-- **Google Flights スクレイピング**:
-  - 検索URL遷移（`DOMContentLoaded`、30秒タイムアウト）。
-  - Cookie / 同意ダイアログの自動スキップ（`button[aria-label*='同意'], button[aria-label*='Accept']`）。
-  - 検索結果カード待機ポーリング（`li.pIav2d, div.yR1fYc` 等、スタックを消費しない `loop/recur` 構造）。
-  - 画面キャプチャ保存 (`doc/work/screenshots/yyyyMMdd-HHmmss_GoogleFlights_[taskId].png`)。
-  - カードDOM要素からの価格、航空会社、発着時刻、所要時間、乗継数の抽出と `FlightOffer` 生成。
+- **Google Flights スクレイピング仕様 (2段階検索 & 堅牢パース)**:
+  - **1段階目の検索（初期アクセス）**:
+    - 出発地、目的地、出発日、到着日、時間帯パラメータを含む検索URLに遷移（`DOMContentLoaded`、30秒タイムアウト）。
+    - Cookie / 同意ダイアログの自動スキップ（`button[aria-label*='同意'], button[aria-label*='Accept']`）。
+  - **2段階目の検索（画面上フィルター操作）**:
+    - 画面上部の「経由地数」ボタン（`button[aria-label*='経由地数']`）をクリック。
+    - 指定値（`指定なし` / `直行便` / `1箇所まで`）に対応するラジオオプションを自動選択し、フィルター適用。
+    - 「並べ替え」ボタンをクリックし、「料金が安い順」を選択して結果をソート。
+  - **画面キャプチャ保存**:
+    - フィルター＆ソート適用完了後、**ウィンドウサイズ（1440x900）に収まる最安値便（1位）が画面上部に明確に見えている状態**で撮影・保存 (`doc/work/screenshots/yyyyMMdd-HHmmss_GoogleFlights_[taskId].png`)。
+  - **フライトデータ抽出 (上位 10 件 ※設定値)**:
+    - フライトカード要素 `li.pIav2d` を走査し、先頭から指定件数（デフォルト 10 件）を抽出。
+    - **価格抽出**: `span[aria-label*='円']` の `aria-label` / innerText または `div.JMc5Xc[aria-label]` から正規表現 `r"(\d+)\s*円"` で抽出（時刻の誤認バグを完全排除）。
+    - **便名抽出**: 各カードの `itinerary=...` 属性から便名（例: `5J 5055`, `NH 869`）を完全取得。
+    - **同一航空券キー**: `flight_key` を算出して保存。
 - **Skyscanner スクレイピング & アンチBot対策**:
   - 公式トップページ (`https://www.skyscanner.jp/`) への事前ウォームアップ（セッションCookie・テレメトリ確立、自然なマウス移動、Cookie受諾）。
   - Referer `https://www.skyscanner.jp/` を保持した検索URLへのアクセス。
