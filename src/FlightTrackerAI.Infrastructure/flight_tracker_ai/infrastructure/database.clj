@@ -95,6 +95,7 @@
   CREATE TABLE IF NOT EXISTS system_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       default_check_interval_hours INTEGER NOT NULL DEFAULT 12,
+      default_max_results_count INTEGER NOT NULL DEFAULT 10,
       default_webhook_url TEXT,
       openrouter_api_key TEXT,
       enable_google_flights INTEGER NOT NULL DEFAULT 1,
@@ -114,6 +115,9 @@
       inbound_date TEXT,
       preferred_airlines TEXT NOT NULL DEFAULT '[]',
       max_stops TEXT NOT NULL DEFAULT 'Any',
+      outbound_time_range TEXT NOT NULL DEFAULT 'Any',
+      inbound_time_range TEXT NOT NULL DEFAULT 'Any',
+      max_results_count INTEGER NOT NULL DEFAULT 10,
       target_price_jpy INTEGER,
       check_interval_hours INTEGER NOT NULL DEFAULT 12,
       webhook_url TEXT,
@@ -127,6 +131,7 @@
       last_checked_at TEXT,
       last_lowest_price_jpy INTEGER,
       last_lowest_airlines TEXT,
+      last_lowest_flight_number TEXT,
       last_lowest_provider TEXT,
       ai_analysis_summary TEXT
   );
@@ -156,6 +161,8 @@
       task_id TEXT NOT NULL,
       run_log_id TEXT NOT NULL,
       provider TEXT NOT NULL,
+      flight_number TEXT,
+      flight_key TEXT,
       airlines_summary TEXT NOT NULL,
       departure_time TEXT NOT NULL,
       arrival_time TEXT NOT NULL,
@@ -176,10 +183,10 @@
 (def seed-ddl
   "
   INSERT OR IGNORE INTO system_settings (
-      id, default_check_interval_hours, default_webhook_url, openrouter_api_key,
+      id, default_check_interval_hours, default_max_results_count, default_webhook_url, openrouter_api_key,
       enable_google_flights, enable_skyscanner, headless_mode, updated_at
   ) VALUES (
-      1, 12, NULL, NULL, 1, 1, 1, datetime('now')
+      1, 12, 10, NULL, NULL, 1, 1, 1, datetime('now')
   );
   ")
 
@@ -196,6 +203,11 @@
         (set! (.CommandText cmd) "ALTER TABLE system_settings ADD COLUMN headless_mode INTEGER NOT NULL DEFAULT 1;")
         (.ExecuteNonQuery cmd)))
 
+    (when-not (column-exists? conn "system_settings" "default_max_results_count")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE system_settings ADD COLUMN default_max_results_count INTEGER NOT NULL DEFAULT 10;")
+        (.ExecuteNonQuery cmd)))
+
     (when-not (column-exists? conn "tasks" "is_headless")
       (with-open [cmd (.CreateCommand conn)]
         (set! (.CommandText cmd) "ALTER TABLE tasks ADD COLUMN is_headless INTEGER NOT NULL DEFAULT 1;")
@@ -206,10 +218,44 @@
         (set! (.CommandText cmd) "ALTER TABLE tasks ADD COLUMN ai_analysis_summary TEXT;")
         (.ExecuteNonQuery cmd)))
 
+    (when-not (column-exists? conn "tasks" "outbound_time_range")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE tasks ADD COLUMN outbound_time_range TEXT NOT NULL DEFAULT 'Any';")
+        (.ExecuteNonQuery cmd)))
+
+    (when-not (column-exists? conn "tasks" "inbound_time_range")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE tasks ADD COLUMN inbound_time_range TEXT NOT NULL DEFAULT 'Any';")
+        (.ExecuteNonQuery cmd)))
+
+    (when-not (column-exists? conn "tasks" "max_results_count")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE tasks ADD COLUMN max_results_count INTEGER NOT NULL DEFAULT 10;")
+        (.ExecuteNonQuery cmd)))
+
+    (when-not (column-exists? conn "tasks" "last_lowest_flight_number")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE tasks ADD COLUMN last_lowest_flight_number TEXT;")
+        (.ExecuteNonQuery cmd)))
+
     (when-not (column-exists? conn "task_run_logs" "ai_analysis_summary")
       (with-open [cmd (.CreateCommand conn)]
         (set! (.CommandText cmd) "ALTER TABLE task_run_logs ADD COLUMN ai_analysis_summary TEXT;")
         (.ExecuteNonQuery cmd)))
+
+    (when-not (column-exists? conn "flight_snapshots" "flight_number")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE flight_snapshots ADD COLUMN flight_number TEXT;")
+        (.ExecuteNonQuery cmd)))
+
+    (when-not (column-exists? conn "flight_snapshots" "flight_key")
+      (with-open [cmd (.CreateCommand conn)]
+        (set! (.CommandText cmd) "ALTER TABLE flight_snapshots ADD COLUMN flight_key TEXT;")
+        (.ExecuteNonQuery cmd)))
+
+    (with-open [cmd (.CreateCommand conn)]
+      (set! (.CommandText cmd) "CREATE INDEX IF NOT EXISTS idx_snapshots_flight_key ON flight_snapshots(flight_key);")
+      (.ExecuteNonQuery cmd))
 
     ;; 3. 初期シードデータ投入
     (with-open [cmd (.CreateCommand conn)]

@@ -4,8 +4,8 @@
 
 - [x] 1.1 `domain_tests.clj` に新規フィールド（`outbound_time_range`, `inbound_time_range`, `max_stops`, `max_results_count`, `flight_number`, `flight_key`）の仕様検証テストを追加し、テスト失敗を確認する (Red)
 - [x] 1.2 `src/FlightTrackerAI.Core/flight_tracker_ai/core/domain.clj` に `Task`, `FlightOffer`, `FlightSnapshot` の各レコードおよびファクトリ関数を拡張し、単体テストを通す (Green/Refactor)
-- [ ] 1.3 `database_tests.clj` にマイグレーション（新規カラム追加および冪等性）の検証テストを追加し、テスト失敗を確認する (Red)
-- [ ] 1.4 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/database.clj` に SQLite DB スキーマ拡張・マイグレーション処理を実装し、テストを通す (Green/Refactor)
+- [x] 1.3 `database_tests.clj` にマイグレーション（新規カラム追加および冪等性）の検証テストを追加し、テスト失敗を確認する (Red)
+- [x] 1.4 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/database.clj` に SQLite DB スキーマ拡張・マイグレーション処理を実装し、テストを通す (Green/Refactor)
 
 ## 2. Google Flights スクレイパーの全面改訂 (TDD)
 

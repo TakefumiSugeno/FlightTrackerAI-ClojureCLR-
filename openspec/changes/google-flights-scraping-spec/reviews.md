@@ -109,3 +109,52 @@
 
 - **LGTM**: true
 - **次のアクション**: Task 1.3（DBマイグレーションのテスト作成・Red確認）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-1.3
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 1.3 `database_tests.clj` にマイグレーション（新規カラム追加および冪等性）の検証テストを追加し、テスト失敗を確認する (Red)
+- **レビュアー**: QA Agent
+- **対象成果物**: `test/FlightTrackerAI.Infrastructure.Tests/flight_tracker_ai/infrastructure/database_tests.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                   | 判定 | コメント                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 仕様書の期待値がテストケースとしてコード化されているか | ✅   | `default_max_results_count`, `outbound_time_range`, `inbound_time_range`, `max_results_count`, `last_lowest_flight_number`, `flight_number`, `flight_key`, `idx_snapshots_flight_key` の検証テストを追加 |
+| 2   | 正常系・異常系・境界値が考慮されているか               | ✅   | 新規作成時だけでなく、旧スキーマ（既存DBレコード保持）からのマイグレーション検証テストを網羅                                                                                                             |
+| 3   | TDD Red状態が確認できているか                          | ✅   | 未定義カラム `default_max_results_count` による `SqliteException`（Error 2件）でRed状態を確認                                                                                                            |
+| 4   | ソースとテストの 1:1 対応が維持されているか            | ✅   | `database.clj` ⇔ `database_tests.clj` に準拠                                                                                                                                                             |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 1.4（`database.clj` へのスキーマ拡張・マイグレーション実装とGreen化）へ着手
+
+---
+
+# レビュー記録: google-flights-scraping-spec / apply / task-1.4
+
+- **日時**: 2026-10-01
+- **フェーズ**: apply
+- **タスク**: 1.4 `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/database.clj` に SQLite DB スキーマ拡張・マイグレーション処理を実装し、テストを通す (Green/Refactor)
+- **レビュアー**: PG Agent
+- **対象成果物**: `src/FlightTrackerAI.Infrastructure/flight_tracker_ai/infrastructure/database.clj`
+
+## チェックリスト結果
+
+| #   | 観点                                                 | 判定 | コメント                                                                                                    |
+| --- | ---------------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------- |
+| 1   | 設計書（`design.md`）および仕様書との整合性          | ✅   | `tasks`, `flight_snapshots`, `system_settings` への各カラム追加およびインデックス作成が完全に反映されている |
+| 2   | コード品質・可読性・命名・DRY・ClojureCLR イディオム | ✅   | `column-exists?` を用いた冪等な ALTER TABLE 実行、およびインデックス作成順序の安全設計がなされている        |
+| 3   | 境界値・異常系・エラー処理の網羅                     | ✅   | 既存DBの旧スキーマからの安全な移行とデフォルト値設定が動作確認済み                                          |
+| 4   | ソースとテストの 1:1 対応命名規約遵守                | ✅   | `database.clj` ⇔ `database_tests.clj` に準拠                                                                |
+| 5   | テスト通過（Green）の確認                            | ✅   | 全 22 テストスイート、593 アサーションが通過（Failure 0, Error 0）                                          |
+
+## 判定
+
+- **LGTM**: true
+- **次のアクション**: Task 2.1（Google Flights スクレイパーのオフライン単体テスト作成・Red確認）へ着手
