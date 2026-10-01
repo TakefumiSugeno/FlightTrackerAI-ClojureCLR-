@@ -71,3 +71,24 @@
 | クロス環境動作検証     |  ✅  | `scripts/test.ps1` が Windows PowerShell 5.1 および pwsh 7 の両方で構文エラーなく正常完走することを確認                                              |
 
 **判定**: LGTM (true)
+
+---
+
+## Archive Phase 総括レビュー
+
+- **日時**: 2026-10-02
+- **フェーズ**: archive
+- **レビュアー**: User Agent, SE Agent, PG Agent, QA Agent（全役割）
+- **対象成果物**: 全成果物およびメイン仕様 `openspec/specs/test-execution-and-reporting/spec.md`
+
+| #   | 観点                         | 判定 | コメント                                                                                 |
+| :-- | :--------------------------- | :--: | :--------------------------------------------------------------------------------------- |
+| 1   | メイン仕様への同期           |  ✅  | `openspec/specs/test-execution-and-reporting/spec.md` に正常同期済み、バリデーション合格 |
+| 2   | 全テスト通過・カバレッジ達成 |  ✅  | 全 105 テストケース PASS、実測カバレッジ 90.8% 達成、HTML レポートエビデンス確認済み     |
+| 3   | UIモック同期                 |  ✅  | UI 変更なしのためモック同期不要                                                          |
+| 4   | 関連ドキュメント整合性       |  ✅  | `test_runner.clj` および `scripts/test.ps1` と規約（AGENTS.md 規約3）の整合性確認        |
+| 5   | 技術的負債・課題記録         |  ✅  | `handover.md` に申し送り事項（将来のブランチカバレッジ拡張等）を記録                     |
+| 6   | 自動フォーマット             |  ✅  | Prettier によるフォーマット適用済み                                                      |
+
+**判定**: **全役割 LGTM (true)**  
+**次のアクション**: ユーザー合意のもと `openspec archive` を実行
