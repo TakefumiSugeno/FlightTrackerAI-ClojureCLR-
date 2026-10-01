@@ -22,5 +22,5 @@
 
 ## 4. E2E 検証・カバレッジ達成およびレポート確認
 
-- [ ] 4.1 E2E テストを実行し、上位10件のフライトデータ取得と保存された画面キャプチャの最安値金額が 100% 一致することを検証する
-- [ ] 4.2 `./scripts/test.ps1` を実行し、全テスト通過（`doc/work/TestResults/latest/TestResults.html`）およびコードカバレッジ 80% 以上（`doc/work/TestResults/latest/CoverageReport.html`）を確認する
+- [x] 4.1 E2E テストを実行し、上位10件のフライトデータ取得と保存された画面キャプチャの最安値金額が 100% 一致することを検証する
+- [x] 4.2 `./scripts/test.ps1` を実行し、全テスト通過（`doc/work/TestResults/latest/TestResults.html`）およびコードカバレッジ 80% 以上（`doc/work/TestResults/latest/CoverageReport.html`）を確認する
