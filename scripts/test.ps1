@@ -1,4 +1,7 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
+
+# コンソールの出力エンコーディングを UTF-8 に設定
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "  FlightTrackerAI - ClojureCLR Test & Coverage Pipeline" -ForegroundColor Cyan
@@ -29,17 +32,17 @@ $coveragePath = Join-Path $latestDir "CoverageReport.html"
 # 最新の日時フォルダを取得して表示
 $historyDirs = Get-ChildItem "doc/work/TestResults" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d{8}-\d{6}$' } | Sort-Object Name -Descending
 if ($historyDirs -and $historyDirs.Count -gt 0) {
-    Write-Host "✔ 実行履歴レポート: $($historyDirs[0].FullName)" -ForegroundColor Cyan
+    Write-Host "[OK] 実行履歴レポート: $($historyDirs[0].FullName)" -ForegroundColor Cyan
 }
 
 if (Test-Path $resultsPath) {
-    Write-Host "✔ テスト合否レポート (Latest): $resultsPath" -ForegroundColor Green
+    Write-Host "[OK] テスト合否レポート (Latest): $resultsPath" -ForegroundColor Green
 } else {
     Write-Warning "テスト合否レポートが生成されていません: $resultsPath"
 }
 
 if (Test-Path $coveragePath) {
-    Write-Host "✔ カバレッジレポート (Latest): $coveragePath" -ForegroundColor Green
+    Write-Host "[OK] カバレッジレポート (Latest): $coveragePath" -ForegroundColor Green
 } else {
     Write-Warning "カバレッジレポートが生成されていません: $coveragePath"
 }
@@ -49,5 +52,5 @@ if ($testExitCode -ne 0) {
     exit $testExitCode
 }
 
-Write-Host "`n✔ 全テストパス & レポート生成完了！" -ForegroundColor Green
+Write-Host "`n[OK] 全テストパス & レポート生成完了！" -ForegroundColor Green
 exit 0
